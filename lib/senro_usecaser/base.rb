@@ -11,7 +11,7 @@ module SenroUsecaser
     # rubocop:disable Metrics/ParameterLists
     #: (singleton(Base), ?if_condition: (Symbol | Proc)?, ?unless_condition: (Symbol | Proc)?, ?on_failure: Symbol?,
     #:  ?all_conditions: Array[(Symbol | Proc)]?, ?any_conditions: Array[(Symbol | Proc)]?,
-    #:  ?input_mapping: (Symbol | Proc | Hash[Symbol, Symbol])?) -> void
+    #:  ?input_mapping: (Symbol | Proc)?) -> void
     def initialize(use_case_class, if_condition: nil, unless_condition: nil, on_failure: nil,
                    all_conditions: nil, any_conditions: nil, input_mapping: nil)
       @use_case_class = use_case_class
@@ -47,8 +47,6 @@ module SenroUsecaser
         use_case_instance.send(input_mapping, context)
       when Proc
         input_mapping.call(context)
-      when Hash
-        map_hash_input(context)
       else
         context
       end
@@ -77,20 +75,11 @@ module SenroUsecaser
     def any_condition_met?(context, use_case_instance)
       any_conditions.any? { |cond| evaluate_condition(cond, context, use_case_instance) }
     end
-
-    #: (Hash[Symbol, untyped]) -> Hash[Symbol, untyped]
-    def map_hash_input(context)
-      return context unless context.is_a?(Hash)
-
-      input_mapping.transform_values do |source_key|
-        context[source_key]
-      end
-    end
   end
 
   # Base class for all UseCases
   #
-  # @example Basic UseCase
+  # @example Basic UseCase with keyword arguments
   #   class CreateUserUseCase < SenroUsecaser::Base
   #     def call(name:, email:)
   #       user = User.create(name: name, email: email)
@@ -100,56 +89,46 @@ module SenroUsecaser
   #
   #   result = CreateUserUseCase.call(name: "Taro", email: "taro@example.com")
   #
-  # @example With dependency injection
+  # @example With input/output classes (recommended for pipelines)
   #   class CreateUserUseCase < SenroUsecaser::Base
-  #     depends_on :user_repository
-  #     depends_on :event_publisher
+  #     input CreateUserInput
+  #     output CreateUserOutput
   #
-  #     def call(name:, email:)
-  #       user = user_repository.create(name: name, email: email)
-  #       event_publisher.publish(UserCreated.new(user))
-  #       success(user)
+  #     def call(input)
+  #       user = User.create(name: input.name, email: input.email)
+  #       success(CreateUserOutput.new(user: user))
   #     end
   #   end
   #
-  # @example With namespace
-  #   class Admin::CreateUserUseCase < SenroUsecaser::Base
-  #     namespace :admin
-  #     depends_on :user_repository  # Resolves from admin namespace
-  #
-  #     def call(name:, email:)
-  #       # ...
+  # @example Pipeline with input/output chaining
+  #   class StepA < SenroUsecaser::Base
+  #     input AInput
+  #     output AOutput
+  #     def call(input)
+  #       success(AOutput.new(value: input.value * 2))
   #     end
+  #   end
+  #
+  #   class StepB < SenroUsecaser::Base
+  #     input AOutput  # Receives StepA's output directly
+  #     output BOutput
+  #     def call(input)
+  #       success(BOutput.new(result: input.value + 1))
+  #     end
+  #   end
+  #
+  #   class Pipeline < SenroUsecaser::Base
+  #     organize StepA, StepB
   #   end
   class Base
-    # Methods to exclude from input_to_hash conversion
-    # These methods may have side effects or are not intended as data accessors
-    EXCLUDED_INPUT_METHODS = %i[
-      validate! validate valid? invalid? errors validation_errors
-      run_validations! run_validations
-    ].freeze
-
     class << self
       # Declares a dependency to be injected from the container
-      #
-      # @example Without type (untyped)
-      #   class CreateUserUseCase < SenroUsecaser::Base
-      #     depends_on :user_repository
-      #     depends_on :logger
-      #   end
-      #
-      # @example With type
-      #   class CreateUserUseCase < SenroUsecaser::Base
-      #     depends_on :user_repository, UserRepository
-      #     depends_on :logger, Logger
-      #   end
       #
       #: (Symbol, ?Class) -> void
       def depends_on(name, type = nil)
         dependencies << name unless dependencies.include?(name)
         dependency_types[name] = type if type
 
-        # Define accessor method
         define_method(name) do
           @_dependencies[name]
         end
@@ -171,16 +150,6 @@ module SenroUsecaser
 
       # Sets the namespace for dependency resolution
       #
-      # @example
-      #   class Admin::CreateUserUseCase < SenroUsecaser::Base
-      #     namespace :admin
-      #   end
-      #
-      # @example With nested namespace
-      #   class Admin::Reports::GenerateUseCase < SenroUsecaser::Base
-      #     namespace "admin::reports"
-      #   end
-      #
       #: ((Symbol | String)) -> void
       def namespace(name)
         @use_case_namespace = name
@@ -193,24 +162,14 @@ module SenroUsecaser
 
       # Declares a sequence of UseCases to execute as a pipeline
       #
-      # @example Basic organize (list format)
-      #   class CreateOrderUseCase < SenroUsecaser::Base
-      #     organize ValidateOrder, ChargePayment, SendConfirmation
-      #   end
+      # @example Basic organize
+      #   organize StepA, StepB, StepC
       #
-      # @example With block and step (DSL format)
-      #   class CreateOrderUseCase < SenroUsecaser::Base
-      #     organize do
-      #       step ValidateOrder
-      #       step ApplyCoupon, if: :has_coupon?
-      #       step ChargePayment, unless: :free_order?
-      #       step SendEmail, on_failure: :continue
-      #     end
-      #   end
-      #
-      # @example With error strategy
-      #   class CreateOrderUseCase < SenroUsecaser::Base
-      #     organize ValidateOrder, ChargePayment, on_failure: :collect
+      # @example With block and step
+      #   organize do
+      #     step StepA
+      #     step StepB, if: :should_run?
+      #     step StepC, on_failure: :continue
       #   end
       #
       #: (*Class, ?on_failure: Symbol) ?{ () -> void } -> void
@@ -229,38 +188,10 @@ module SenroUsecaser
 
       # Defines a step in the organize block
       #
-      # @example Basic step
-      #   step ValidateOrder
-      #
-      # @example With conditions
-      #   step ApplyCoupon, if: :has_coupon?
-      #   step ChargePayment, unless: :free_order?
-      #
-      # @example With lambda condition
-      #   step ApplyCoupon, if: ->(ctx) { ctx[:coupon_code].present? }
-      #
-      # @example With per-step error handling
-      #   step SendEmail, on_failure: :continue
-      #
-      # @example With multiple conditions (all must be true)
-      #   step SendNotification, all: [:has_email?, :notification_enabled?]
-      #
-      # @example With multiple conditions (any must be true)
-      #   step SendEmail, any: [:is_admin?, :is_vip?]
-      #
-      # @example With custom input mapping (hash)
-      #   step CreateUser, input: { name: :user_name, email: :user_email }
-      #
-      # @example With custom input mapping (method)
-      #   step CreateUser, input: :prepare_user_input
-      #
-      # @example With custom input mapping (lambda)
-      #   step CreateUser, input: ->(ctx) { { name: ctx[:full_name] } }
-      #
       # rubocop:disable Metrics/ParameterLists
       #: (Class, ?if: (Symbol | Proc)?, ?unless: (Symbol | Proc)?, ?on_failure: Symbol?,
       #:  ?all: Array[(Symbol | Proc)]?, ?any: Array[(Symbol | Proc)]?,
-      #:  ?input: (Symbol | Proc | Hash[Symbol, Symbol])?) -> void
+      #:  ?input: (Symbol | Proc)?) -> void
       def step(use_case_class, if: nil, unless: nil, on_failure: nil, all: nil, any: nil, input: nil)
         raise "step can only be called inside organize block" unless @_defining_steps
 
@@ -288,12 +219,7 @@ module SenroUsecaser
         @on_failure_strategy || :stop
       end
 
-      # Adds extension modules with hooks (before/after/around)
-      #
-      # @example
-      #   class CreateUserUseCase < SenroUsecaser::Base
-      #     extend_with Logging, Transaction
-      #   end
+      # Adds extension modules with hooks
       #
       #: (*Module) -> void
       def extend_with(*extensions)
@@ -309,10 +235,7 @@ module SenroUsecaser
 
       # Adds a before hook
       #
-      # @example
-      #   before { |context| puts "Before: #{context}" }
-      #
-      #: () { (Hash[Symbol, untyped]) -> void } -> void
+      #: () { (untyped) -> void } -> void
       def before(&block)
         before_hooks << block
       end
@@ -326,10 +249,7 @@ module SenroUsecaser
 
       # Adds an after hook
       #
-      # @example
-      #   after { |context, result| puts "After: #{result}" }
-      #
-      #: () { (Hash[Symbol, untyped], Result[untyped]) -> void } -> void
+      #: () { (untyped, Result[untyped]) -> void } -> void
       def after(&block)
         after_hooks << block
       end
@@ -343,12 +263,7 @@ module SenroUsecaser
 
       # Adds an around hook
       #
-      # @example
-      #   around do |context, &block|
-      #     ActiveRecord::Base.transaction { block.call }
-      #   end
-      #
-      #: () { (Hash[Symbol, untyped]) { () -> Result[untyped] } -> Result[untyped] } -> void
+      #: () { (untyped) { () -> Result[untyped] } -> Result[untyped] } -> void
       def around(&block)
         around_hooks << block if block
       end
@@ -360,14 +275,7 @@ module SenroUsecaser
         @around_hooks ||= []
       end
 
-      # Declares the expected input parameters for this UseCase
-      #
-      # This is primarily for documentation and can be used for validation.
-      #
-      # @example
-      #   class CreateUserUseCase < SenroUsecaser::Base
-      #     input CreateUserInput
-      #   end
+      # Declares the expected input type for this UseCase
       #
       #: (Class) -> void
       def input(type)
@@ -381,18 +289,6 @@ module SenroUsecaser
 
       # Declares the expected output type for this UseCase
       #
-      # This is primarily for documentation and can be used for validation.
-      #
-      # @example
-      #   class CreateUserUseCase < SenroUsecaser::Base
-      #     output User
-      #   end
-      #
-      # @example With structure
-      #   class CreateUserUseCase < SenroUsecaser::Base
-      #     output user: User, token: String
-      #   end
-      #
       #: ((Class | Hash[Symbol, Class])) -> void
       def output(type_or_schema)
         @output_schema = type_or_schema
@@ -405,38 +301,12 @@ module SenroUsecaser
 
       # Calls the UseCase with the given input
       #
-      # @example With input class
-      #   input = CreateUserInput.new(name: "Taro", email: "taro@example.com")
-      #   CreateUserUseCase.call(input)
-      #
-      # @example With custom container
-      #   CreateUserUseCase.call(input, container: my_container)
-      #
-      # @example Pipeline step (keyword arguments)
-      #   StepUseCase.call(user_id: 1, product_ids: [101])
-      #
       #: [T] (?untyped, ?container: Container, **untyped) -> Result[T]
       def call(input = nil, container: nil, **args)
         new(container: container).perform(input, capture_exceptions: false, **args)
       end
 
       # Calls the UseCase and captures any exceptions as failures
-      #
-      # When used with organize pipelines, each step is also called with call!,
-      # allowing exceptions to be collected when using on_failure: :collect.
-      #
-      # @example
-      #   CreateUserUseCase.call!(input)
-      #
-      # @example With organize and :collect
-      #   class PlaceOrderUseCase < SenroUsecaser::Base
-      #     organize on_failure: :collect do
-      #       step ValidateOrderUseCase   # Exception -> Result.failure, collected
-      #       step ChargePaymentUseCase   # Exception -> Result.failure, collected
-      #     end
-      #   end
-      #   result = PlaceOrderUseCase.call!(input)
-      #   result.errors  # Contains all collected errors including from exceptions
       #
       #: [T] (?untyped, ?container: Container, **untyped) -> Result[T]
       def call!(input = nil, container: nil, **args)
@@ -455,7 +325,6 @@ module SenroUsecaser
       end
 
       # @api private
-      # Hook called when the class is inherited
       def inherited(subclass)
         super
         copy_configuration_to(subclass)
@@ -484,15 +353,6 @@ module SenroUsecaser
 
     # Initializes the UseCase with dependencies resolved from the container
     #
-    # @example With global container
-    #   use_case = CreateUserUseCase.new
-    #
-    # @example With custom container
-    #   use_case = CreateUserUseCase.new(container: my_container)
-    #
-    # @example With manual dependencies (for testing)
-    #   use_case = CreateUserUseCase.new(dependencies: { user_repository: mock_repo })
-    #
     #: (?container: Container?, ?dependencies: Hash[Symbol, untyped]) -> void
     def initialize(container: nil, dependencies: {})
       @_container = container || SenroUsecaser.container
@@ -503,31 +363,28 @@ module SenroUsecaser
 
     # Performs the UseCase with hooks
     #
-    # This is the entry point called by class methods.
-    # It wraps the call method with before/after/around hooks.
-    #
     #: (?untyped, ?capture_exceptions: bool, **untyped) -> Result[untyped]
     def perform(input = nil, capture_exceptions: false, **args)
-      # Store capture_exceptions flag for use in pipeline steps
       @_capture_exceptions = capture_exceptions
 
-      effective_args = build_effective_args(input, args)
-      context_with_input = build_context_with_input(input, effective_args)
-
-      # Determine how to call based on whether input class is defined
-      execute_with_hooks(context_with_input) do
-        execute_call(input, effective_args)
+      # Pass input directly to hooks and call
+      context = input || args
+      execute_with_hooks(context) do
+        if self.class.input_class || self.class.organized_steps
+          # Input class or pipeline - pass input directly
+          call(input)
+        else
+          # Keyword arguments style
+          call(**args)
+        end
       end
     end
 
     # Executes the UseCase logic
     #
-    # If organize is defined, executes the pipeline.
-    # Otherwise, subclasses must implement this method.
-    #
     #: (?untyped input) -> Result[untyped]
     def call(input = nil)
-      return execute_pipeline_with_input(input) if self.class.organized_steps
+      return execute_pipeline(input) if self.class.organized_steps
 
       raise NotImplementedError, "#{self.class.name}#call must be implemented"
     end
@@ -536,12 +393,6 @@ module SenroUsecaser
 
     # Creates a success Result with the given value
     #
-    # @example
-    #   def call(name:)
-    #     user = User.create(name: name)
-    #     success(user)
-    #   end
-    #
     #: [T] (T) -> Result[T]
     def success(value)
       Result.success(value)
@@ -549,96 +400,12 @@ module SenroUsecaser
 
     # Creates a failure Result with the given errors
     #
-    # @example
-    #   def call(name:)
-    #     return failure(Error.new(code: :invalid, message: "Invalid")) if name.empty?
-    #     # ...
-    #   end
-    #
     #: (*Error) -> Result[untyped]
     def failure(*errors)
       Result.failure(*errors)
     end
 
-    # Converts an input object to a hash for internal processing
-    #
-    #: (untyped) -> Hash[Symbol, untyped]
-    def input_to_hash(input)
-      return input if input.is_a?(Hash)
-
-      # Get all public reader methods (excluding Object methods and validation methods)
-      methods = input.class.instance_methods(false).select do |m|
-        next false if EXCLUDED_INPUT_METHODS.include?(m)
-        next false if m.end_with?("!") # Exclude bang methods (may have side effects)
-
-        input.class.instance_method(m).arity.zero?
-      end
-
-      # @type var hash: Hash[Symbol, untyped]
-      hash = {}
-      methods.each do |method|
-        hash[method] = input.send(method)
-      end
-      hash
-    end
-
-    # Converts a hash to an input object
-    #
-    #: (Hash[Symbol, untyped]) -> untyped
-    def hash_to_input(hash)
-      input_class = self.class.input_class
-      return hash unless input_class
-
-      # Create input object from hash using keyword arguments
-      input_class.new(**hash)
-    rescue ArgumentError
-      # If the input class doesn't accept these kwargs, return hash
-      hash
-    end
-
-    # Builds effective arguments from input object or keyword args
-    #
-    #: (untyped, Hash[Symbol, untyped]) -> Hash[Symbol, untyped]
-    def build_effective_args(input, args)
-      if input && self.class.input_class
-        input_to_hash(input)
-      elsif input.is_a?(Hash)
-        input
-      else
-        args
-      end
-    end
-
-    # Builds context hash with original input for validation hooks
-    #
-    #: (untyped, Hash[Symbol, untyped]) -> Hash[Symbol, untyped]
-    def build_context_with_input(input, effective_args)
-      return effective_args unless input && self.class.input_class
-
-      effective_args.merge(_original_input: input)
-    end
-
-    # Executes the call method with appropriate input
-    #
-    #: (untyped, Hash[Symbol, untyped]) -> untyped
-    def execute_call(input, effective_args)
-      if self.class.input_class
-        input_obj = input || hash_to_input(effective_args)
-        call(input_obj)
-      else
-        call(**effective_args)
-      end
-    end
-
     # Creates a failure Result from an exception
-    #
-    # @example
-    #   def call(id:)
-    #     user = User.find(id)
-    #     success(user)
-    #   rescue ActiveRecord::RecordNotFound => e
-    #     failure_from_exception(e, code: :not_found)
-    #   end
     #
     #: (Exception, ?code: Symbol) -> Result[untyped]
     def failure_from_exception(exception, code: :exception)
@@ -647,16 +414,6 @@ module SenroUsecaser
 
     # Executes a block and captures any exceptions as failures
     #
-    # @example
-    #   def call(id:)
-    #     capture { User.find(id) }
-    #   end
-    #
-    # @example With specific exception classes
-    #   def call(id:)
-    #     capture(ActiveRecord::RecordNotFound, code: :not_found) { User.find(id) }
-    #   end
-    #
     #: [T] (*Class, ?code: Symbol) { () -> T } -> Result[T]
     def capture(*exception_classes, code: :exception, &)
       Result.capture(*exception_classes, code: code, &)
@@ -664,30 +421,16 @@ module SenroUsecaser
 
     # Executes the core logic with before/after/around hooks
     #
-    #: (Hash[Symbol, untyped]) { () -> Result[untyped] } -> Result[untyped]
+    #: (untyped) { () -> Result[untyped] } -> Result[untyped]
     def execute_with_hooks(context, &core_block)
-      # Build the execution chain with around hooks
       execution = build_around_chain(context, core_block)
-
-      # Run before hooks
       run_before_hooks(context)
-
-      # Execute the chain (around hooks wrapping core logic)
       result = execution.call
-
-      # Run after hooks
       run_after_hooks(context, result)
-
       result
     end
 
     # Wraps a non-Result value in Result.success
-    # This allows call methods to return plain values instead of explicit Result objects
-    #
-    # @example
-    #   def call(name:)
-    #     User.create(name: name)  # Automatically wrapped as Result.success(user)
-    #   end
     #
     #: (untyped) -> Result[untyped]
     def wrap_result(value)
@@ -698,16 +441,11 @@ module SenroUsecaser
 
     # Builds the around hook chain
     #
-    #: (Hash[Symbol, untyped], Proc) -> Proc
+    #: (untyped, Proc) -> Proc
     def build_around_chain(context, core_block)
-      # Wrap core_block to ensure it returns a Result
-      # This allows call methods to return plain values instead of explicit Result objects
       wrapped_core = -> { wrap_result(core_block.call) }
-
-      # Collect all around hooks (from extensions and block-based)
       all_around_hooks = collect_around_hooks
 
-      # Build chain from inside out
       all_around_hooks.reverse.reduce(wrapped_core) do |inner, hook|
         -> { wrap_result(hook.call(context) { inner.call }) }
       end
@@ -718,46 +456,31 @@ module SenroUsecaser
     #: () -> Array[Proc]
     def collect_around_hooks
       hooks = [] #: Array[Proc]
-
-      # From extensions
       self.class.extensions.each do |ext|
         hooks << ext.method(:around).to_proc if ext.respond_to?(:around)
       end
-
-      # Block-based hooks
       hooks.concat(self.class.around_hooks)
-
       hooks
     end
 
     # Runs all before hooks
     #
-    #: (Hash[Symbol, untyped]) -> void
+    #: (untyped) -> void
     def run_before_hooks(context)
-      # From extensions
       self.class.extensions.each do |ext|
         ext.send(:before, context) if ext.respond_to?(:before)
       end
-
-      # Block-based hooks
-      self.class.before_hooks.each do |hook|
-        hook.call(context)
-      end
+      self.class.before_hooks.each { |hook| hook.call(context) }
     end
 
     # Runs all after hooks
     #
-    #: (Hash[Symbol, untyped], Result[untyped]) -> void
+    #: (untyped, Result[untyped]) -> void
     def run_after_hooks(context, result)
-      # From extensions
       self.class.extensions.each do |ext|
         ext.send(:after, context, result) if ext.respond_to?(:after)
       end
-
-      # Block-based hooks
-      self.class.after_hooks.each do |hook|
-        hook.call(context, result)
-      end
+      self.class.after_hooks.each { |hook| hook.call(context, result) }
     end
 
     # Resolves dependencies from the container
@@ -786,25 +509,16 @@ module SenroUsecaser
     end
 
     # Returns the effective namespace for dependency resolution
-    # Uses explicitly declared namespace, or infers from module structure if configured
     #
     #: () -> (Symbol | String)?
     def effective_namespace
-      # Explicit namespace takes precedence
       return self.class.use_case_namespace if self.class.use_case_namespace
-
-      # Infer from module structure if enabled
       return nil unless SenroUsecaser.configuration.infer_namespace_from_module
 
       infer_namespace_from_class
     end
 
     # Infers namespace from the class's module structure
-    #
-    # @example
-    #   Admin::CreateUserUseCase => "admin"
-    #   Admin::Reports::GenerateReportUseCase => "admin::reports"
-    #   CreateUserUseCase => nil
     #
     #: () -> String?
     def infer_namespace_from_class
@@ -814,59 +528,33 @@ module SenroUsecaser
       parts = class_name.split("::")
       return nil if parts.length <= 1
 
-      # Remove the class name itself, keep only module parts
       module_parts = parts[0...-1] || [] #: Array[String]
       return nil if module_parts.empty?
 
-      # Convert to lowercase namespace format (Admin::Reports => "admin::reports")
       module_parts.map { |part| part.gsub(/([a-z])([A-Z])/, '\1_\2').downcase }.join("::")
     end
 
     # Executes the organized UseCase pipeline
-    # Executes the pipeline with an input object
     #
     #: (untyped) -> Result[untyped]
-    def execute_pipeline_with_input(input)
-      args = input_to_hash(input)
-      execute_pipeline(**args)
-    end
-
-    #
-    #: (**untyped) -> Result[untyped]
-    def execute_pipeline(**args)
-      # Initialize accumulated context with input args
-      @_accumulated_context = args.dup
-
+    def execute_pipeline(input)
       case self.class.on_failure_strategy
       when :stop
-        execute_pipeline_stop(**args)
+        execute_pipeline_stop(input)
       when :continue
-        execute_pipeline_continue(**args)
+        execute_pipeline_continue(input)
       when :collect
-        execute_pipeline_collect(**args)
+        execute_pipeline_collect(input)
       else
         raise ArgumentError, "Unknown on_failure strategy: #{self.class.on_failure_strategy}"
       end
     end
 
-    # Returns the accumulated context across pipeline steps
-    # This is available during pipeline execution.
+    # Executes pipeline with :stop strategy
     #
-    # @example Accessing accumulated context
-    #   def has_user?(ctx)
-    #     accumulated_context[:user].present?
-    #   end
-    #
-    #: () -> Hash[Symbol, untyped]
-    def accumulated_context
-      @_accumulated_context || {}
-    end
-
-    # Executes pipeline with :stop strategy - stops on first failure
-    #
-    #: (**untyped) -> Result[untyped]
-    def execute_pipeline_stop(**args)
-      current_input = args
+    #: (untyped) -> Result[untyped]
+    def execute_pipeline_stop(input)
+      current_input = input
       result = nil #: Result[untyped]?
 
       self.class.organized_steps&.each do |step|
@@ -875,71 +563,72 @@ module SenroUsecaser
         step_result = execute_step(step, current_input)
         return step_result if step_result.failure? && step_should_stop?(step)
 
-        if step_result.success?
-          current_input = result_to_input(step_result)
-          merge_to_accumulated_context(current_input)
-        end
+        current_input = step_result.value if step_result.success?
         result = step_result
       end
 
       result || success(current_input)
     end
 
-    # Executes pipeline with :continue strategy - continues even on failure
+    # Executes pipeline with :continue strategy
     #
-    #: (**untyped) -> Result[untyped]
-    def execute_pipeline_continue(**args)
-      current_input = args
+    #: (untyped) -> Result[untyped]
+    def execute_pipeline_continue(input)
+      current_input = input
       result = nil #: Result[untyped]?
 
       self.class.organized_steps&.each do |step|
         next unless step.should_execute?(current_input, self)
 
         step_result = execute_step(step, current_input)
-
-        # Per-step on_failure: :stop overrides global :continue
         return step_result if step_result.failure? && step.on_failure == :stop
 
-        current_input = result_to_input(step_result)
-        merge_to_accumulated_context(current_input) if step_result.success?
+        current_input = step_result.value if step_result.success?
         result = step_result
       end
 
       result || success(current_input)
     end
 
-    # Executes pipeline with :collect strategy - collects all errors
+    # Executes pipeline with :collect strategy
     #
-    #: (**untyped) -> Result[untyped]
-    def execute_pipeline_collect(**args)
-      current_input = args
-      collected_errors = [] #: Array[Error]
-      last_success_result = nil #: Result[untyped]?
+    #: (untyped) -> Result[untyped]
+    def execute_pipeline_collect(input)
+      errors = [] #: Array[Error]
+      state = { input: input, errors: errors, last_success: nil }
 
       self.class.organized_steps&.each do |step|
-        next unless step.should_execute?(current_input, self)
+        next unless step.should_execute?(state[:input], self)
 
-        result = execute_step(step, current_input)
-        collected_errors, last_success_result, current_input =
-          process_collect_result(result, collected_errors, last_success_result, current_input)
-
-        # Per-step on_failure: :stop overrides global :collect
-        break if result.failure? && step.on_failure == :stop
+        result = execute_step(step, state[:input])
+        break if should_stop_collect_pipeline?(result, step, state)
       end
 
-      collected_errors.any? ? Result.failure(*collected_errors) : (last_success_result || success(current_input))
+      build_collect_result(state)
     end
 
-    # Processes a single result in collect mode
+    # Updates collect state and checks if pipeline should stop
     #
-    #: (Result[untyped], Array[Error], Result[untyped]?, untyped) -> [Array[Error], Result[untyped]?, untyped]
-    def process_collect_result(result, errors, last_success, current_input)
+    #: (Result[untyped], Step, Hash[Symbol, untyped]) -> bool
+    def should_stop_collect_pipeline?(result, step, state)
       if result.failure?
-        [errors + result.errors, last_success, current_input]
+        state[:errors].concat(result.errors)
+        step.on_failure == :stop
       else
-        new_input = result_to_input(result)
-        merge_to_accumulated_context(new_input)
-        [errors, result, new_input]
+        state[:input] = result.value
+        state[:last_success] = result
+        false
+      end
+    end
+
+    # Builds the final result for collect mode
+    #
+    #: (Hash[Symbol, untyped]) -> Result[untyped]
+    def build_collect_result(state)
+      if state[:errors].any?
+        Result.failure(*state[:errors])
+      else
+        state[:last_success] || success(state[:input])
       end
     end
 
@@ -960,84 +649,16 @@ module SenroUsecaser
     end
 
     # Calls a single UseCase in the pipeline
-    # Uses call! if the parent UseCase was invoked with call! (capture_exceptions mode)
+    # Requires input_class to be defined for pipeline steps
     #
-    #: (singleton(Base), Hash[Symbol, untyped]) -> Result[untyped]
+    #: (singleton(Base), untyped) -> Result[untyped]
     def call_use_case(use_case_class, input)
-      input_class = use_case_class.input_class
+      unless use_case_class.input_class
+        raise ArgumentError, "#{use_case_class.name} must define `input` class to be used in a pipeline"
+      end
+
       call_method = @_capture_exceptions || false ? :call! : :call #: Symbol
-
-      if input_class
-        # Convert hash to input object for UseCases with input class
-        input_obj = input_class.new(**input)
-        use_case_class.public_send(call_method, input_obj, container: @_container)
-      else
-        use_case_class.public_send(call_method, nil, container: @_container, **input)
-      end
-    rescue ArgumentError
-      # Fallback to keyword arguments if input class doesn't accept the hash
-      method_name = call_method #: Symbol
-      use_case_class.public_send(method_name, nil, container: @_container, **input)
-    end
-
-    # Converts a result to input for the next UseCase
-    #
-    #: (Result[untyped]) -> Hash[Symbol, untyped]
-    def result_to_input(result)
-      value = result.value
-      if value.is_a?(Hash)
-        value
-      else
-        # Convert output object to hash for next step
-        output_to_hash(value)
-      end
-    end
-
-    # Converts an output object to a hash
-    #
-    #: (untyped) -> Hash[Symbol, untyped]
-    def output_to_hash(output)
-      return output if output.is_a?(Hash)
-
-      # Wrap basic types in :value key
-      return { value: output } if basic_type?(output)
-
-      # Get all public reader methods (excluding Object methods)
-      methods = output.class.instance_methods(false).select do |m|
-        output.class.instance_method(m).arity.zero?
-      end
-
-      # If no custom methods, wrap in :value
-      return { value: output } if methods.empty?
-
-      # @type var hash: Hash[Symbol, untyped]
-      hash = {}
-      methods.each do |method|
-        hash[method] = output.send(method)
-      end
-      hash
-    end
-
-    # Checks if the value is a basic Ruby type
-    #
-    #: (untyped) -> bool
-    def basic_type?(value)
-      case value
-      when String, Symbol, Integer, Float, TrueClass, FalseClass, NilClass, Array
-        true
-      else
-        false
-      end
-    end
-
-    # Merges new data into the accumulated context
-    #
-    #: (Hash[Symbol, untyped]) -> void
-    def merge_to_accumulated_context(data)
-      return unless data.is_a?(Hash)
-
-      @_accumulated_context ||= {} #: Hash[Symbol, untyped]
-      @_accumulated_context.merge!(data)
+      use_case_class.public_send(call_method, input, container: @_container)
     end
   end
 end

@@ -74,7 +74,7 @@ class CreateOrderOutput
   def initialize: (order: Order) -> void
 
   # : () -> Order
-  def order: () -> Order
+  attr_reader order: untyped
 end
 
 class GreetingOutput
@@ -82,7 +82,7 @@ class GreetingOutput
   def initialize: (greeted: String) -> void
 
   # : () -> String
-  def greeted: () -> String
+  attr_reader greeted: untyped
 end
 
 class AccumulatedOutput
@@ -90,10 +90,10 @@ class AccumulatedOutput
   def initialize: (counter: Integer, final: bool) -> void
 
   # : () -> Integer
-  def counter: () -> Integer
+  attr_reader counter: untyped
 
   # : () -> bool
-  def final: () -> bool
+  attr_reader final: untyped
 end
 
 class UserRepository
@@ -189,10 +189,10 @@ class ValidateUserUseCase < SenroUsecaser::Base
     def initialize: (user_id: Integer, product_ids: Array[Integer], **untyped) -> void
 
     # : () -> Integer
-    def user_id: () -> Integer
+    attr_reader user_id: untyped
 
     # : () -> Array[Integer]
-    def product_ids: () -> Array[Integer]
+    attr_reader product_ids: untyped
   end
 
   class Output
@@ -200,10 +200,10 @@ class ValidateUserUseCase < SenroUsecaser::Base
     def initialize: (user: User, product_ids: Array[Integer], **untyped) -> void
 
     # : () -> User
-    def user: () -> User
+    attr_reader user: untyped
 
     # : () -> Array[Integer]
-    def product_ids: () -> Array[Integer]
+    attr_reader product_ids: untyped
   end
 
   def user_repository: () -> UserRepository
@@ -219,10 +219,10 @@ class ValidateProductsUseCase < SenroUsecaser::Base
     def initialize: (user: User, product_ids: Array[Integer], **untyped) -> void
 
     # : () -> User
-    def user: () -> User
+    attr_reader user: untyped
 
     # : () -> Array[Integer]
-    def product_ids: () -> Array[Integer]
+    attr_reader product_ids: untyped
   end
 
   class Output
@@ -230,13 +230,13 @@ class ValidateProductsUseCase < SenroUsecaser::Base
     def initialize: (user: User, items: Array[Product], subtotal: Integer, **untyped) -> void
 
     # : () -> User
-    def user: () -> User
+    attr_reader user: untyped
 
     # : () -> Array[Product]
-    def items: () -> Array[Product]
+    attr_reader items: untyped
 
     # : () -> Integer
-    def subtotal: () -> Integer
+    attr_reader subtotal: untyped
   end
 
   def product_repository: () -> ProductRepository
@@ -252,13 +252,13 @@ class CalculateTaxUseCase < SenroUsecaser::Base
     def initialize: (user: User, items: Array[Product], subtotal: Integer, **untyped) -> void
 
     # : () -> User
-    def user: () -> User
+    attr_reader user: untyped
 
     # : () -> Array[Product]
-    def items: () -> Array[Product]
+    attr_reader items: untyped
 
     # : () -> Integer
-    def subtotal: () -> Integer
+    attr_reader subtotal: untyped
   end
 
   class Output
@@ -266,16 +266,16 @@ class CalculateTaxUseCase < SenroUsecaser::Base
     def initialize: (user: User, items: Array[Product], subtotal: Integer, tax: Integer, **untyped) -> void
 
     # : () -> User
-    def user: () -> User
+    attr_reader user: untyped
 
     # : () -> Array[Product]
-    def items: () -> Array[Product]
+    attr_reader items: untyped
 
     # : () -> Integer
-    def subtotal: () -> Integer
+    attr_reader subtotal: untyped
 
     # : () -> Integer
-    def tax: () -> Integer
+    attr_reader tax: untyped
   end
 
   # : (Input) -> SenroUsecaser::Result[Output]
@@ -289,16 +289,16 @@ class ApplyPremiumDiscountUseCase < SenroUsecaser::Base
     def initialize: (user: User, items: Array[Product], subtotal: Integer, tax: Integer, **untyped) -> void
 
     # : () -> User
-    def user: () -> User
+    attr_reader user: untyped
 
     # : () -> Array[Product]
-    def items: () -> Array[Product]
+    attr_reader items: untyped
 
     # : () -> Integer
-    def subtotal: () -> Integer
+    attr_reader subtotal: untyped
 
     # : () -> Integer
-    def tax: () -> Integer
+    attr_reader tax: untyped
   end
 
   class Output
@@ -306,19 +306,19 @@ class ApplyPremiumDiscountUseCase < SenroUsecaser::Base
     def initialize: (user: User, items: Array[Product], subtotal: Integer, tax: Integer, discount: Integer, **untyped) -> void
 
     # : () -> User
-    def user: () -> User
+    attr_reader user: untyped
 
     # : () -> Array[Product]
-    def items: () -> Array[Product]
+    attr_reader items: untyped
 
     # : () -> Integer
-    def subtotal: () -> Integer
+    attr_reader subtotal: untyped
 
     # : () -> Integer
-    def tax: () -> Integer
+    attr_reader tax: untyped
 
     # : () -> Integer
-    def discount: () -> Integer
+    attr_reader discount: untyped
   end
 
   def discount_service: () -> DiscountService
@@ -334,19 +334,19 @@ class CalculateTotalUseCase < SenroUsecaser::Base
     def initialize: (user: User, items: Array[Product], subtotal: Integer, tax: Integer, ?discount: Integer, **untyped) -> void
 
     # : () -> User
-    def user: () -> User
+    attr_reader user: untyped
 
     # : () -> Array[Product]
-    def items: () -> Array[Product]
+    attr_reader items: untyped
 
     # : () -> Integer
-    def subtotal: () -> Integer
+    attr_reader subtotal: untyped
 
     # : () -> Integer
-    def tax: () -> Integer
+    attr_reader tax: untyped
 
     # : () -> Integer
-    def discount: () -> Integer
+    attr_reader discount: untyped
   end
 
   class Output
@@ -354,22 +354,22 @@ class CalculateTotalUseCase < SenroUsecaser::Base
     def initialize: (user: User, items: Array[Product], subtotal: Integer, tax: Integer, discount: Integer, total: Integer, **untyped) -> void
 
     # : () -> User
-    def user: () -> User
+    attr_reader user: untyped
 
     # : () -> Array[Product]
-    def items: () -> Array[Product]
+    attr_reader items: untyped
 
     # : () -> Integer
-    def subtotal: () -> Integer
+    attr_reader subtotal: untyped
 
     # : () -> Integer
-    def tax: () -> Integer
+    attr_reader tax: untyped
 
     # : () -> Integer
-    def discount: () -> Integer
+    attr_reader discount: untyped
 
     # : () -> Integer
-    def total: () -> Integer
+    attr_reader total: untyped
   end
 
   # : (Input) -> SenroUsecaser::Result[Output]
@@ -383,22 +383,22 @@ class ProcessPaymentUseCase < SenroUsecaser::Base
     def initialize: (user: User, items: Array[Product], subtotal: Integer, tax: Integer, discount: Integer, total: Integer, **untyped) -> void
 
     # : () -> User
-    def user: () -> User
+    attr_reader user: untyped
 
     # : () -> Array[Product]
-    def items: () -> Array[Product]
+    attr_reader items: untyped
 
     # : () -> Integer
-    def subtotal: () -> Integer
+    attr_reader subtotal: untyped
 
     # : () -> Integer
-    def tax: () -> Integer
+    attr_reader tax: untyped
 
     # : () -> Integer
-    def discount: () -> Integer
+    attr_reader discount: untyped
 
     # : () -> Integer
-    def total: () -> Integer
+    attr_reader total: untyped
   end
 
   class Output
@@ -406,25 +406,25 @@ class ProcessPaymentUseCase < SenroUsecaser::Base
     def initialize: (user: User, items: Array[Product], subtotal: Integer, tax: Integer, discount: Integer, total: Integer, payment: PaymentResult, **untyped) -> void
 
     # : () -> User
-    def user: () -> User
+    attr_reader user: untyped
 
     # : () -> Array[Product]
-    def items: () -> Array[Product]
+    attr_reader items: untyped
 
     # : () -> Integer
-    def subtotal: () -> Integer
+    attr_reader subtotal: untyped
 
     # : () -> Integer
-    def tax: () -> Integer
+    attr_reader tax: untyped
 
     # : () -> Integer
-    def discount: () -> Integer
+    attr_reader discount: untyped
 
     # : () -> Integer
-    def total: () -> Integer
+    attr_reader total: untyped
 
     # : () -> PaymentResult
-    def payment: () -> PaymentResult
+    attr_reader payment: untyped
   end
 
   def payment_service: () -> PaymentService
@@ -440,22 +440,22 @@ class CreateOrderRecordUseCase < SenroUsecaser::Base
     def initialize: (user: User, items: Array[Product], subtotal: Integer, tax: Integer, discount: Integer, total: Integer, **untyped) -> void
 
     # : () -> User
-    def user: () -> User
+    attr_reader user: untyped
 
     # : () -> Array[Product]
-    def items: () -> Array[Product]
+    attr_reader items: untyped
 
     # : () -> Integer
-    def subtotal: () -> Integer
+    attr_reader subtotal: untyped
 
     # : () -> Integer
-    def tax: () -> Integer
+    attr_reader tax: untyped
 
     # : () -> Integer
-    def discount: () -> Integer
+    attr_reader discount: untyped
 
     # : () -> Integer
-    def total: () -> Integer
+    attr_reader total: untyped
   end
 
   class Output
@@ -463,10 +463,10 @@ class CreateOrderRecordUseCase < SenroUsecaser::Base
     def initialize: (user: User, order: Order, **untyped) -> void
 
     # : () -> User
-    def user: () -> User
+    attr_reader user: untyped
 
     # : () -> Order
-    def order: () -> Order
+    attr_reader order: untyped
   end
 
   def order_repository: () -> OrderRepository
@@ -482,10 +482,10 @@ class SendOrderNotificationUseCase < SenroUsecaser::Base
     def initialize: (user: User, order: Order, **untyped) -> void
 
     # : () -> User
-    def user: () -> User
+    attr_reader user: untyped
 
     # : () -> Order
-    def order: () -> Order
+    attr_reader order: untyped
   end
 
   class Output
@@ -493,13 +493,13 @@ class SendOrderNotificationUseCase < SenroUsecaser::Base
     def initialize: (user: User, order: Order, notified: bool, **untyped) -> void
 
     # : () -> User
-    def user: () -> User
+    attr_reader user: untyped
 
     # : () -> Order
-    def order: () -> Order
+    attr_reader order: untyped
 
     # : () -> bool
-    def notified: () -> bool
+    attr_reader notified: untyped
   end
 
   def notification_service: () -> NotificationService
@@ -515,7 +515,7 @@ class WrapOrderOutputUseCase < SenroUsecaser::Base
     def initialize: (order: Order, **untyped) -> void
 
     # : () -> Order
-    def order: () -> Order
+    attr_reader order: untyped
   end
 
   # : (Input) -> SenroUsecaser::Result[CreateOrderOutput]
@@ -538,15 +538,13 @@ class CreateOrderUseCase < SenroUsecaser::Base
     def initialize: (user_id: Integer, product_ids: Array[Integer], **untyped) -> void
 
     # : () -> Integer
-    def user_id: () -> Integer
+    attr_reader user_id: untyped
 
     # : () -> Array[Integer]
-    def product_ids: () -> Array[Integer]
+    attr_reader product_ids: untyped
   end
 
   def self.call: (Input, ?container: SenroUsecaser::Container) -> SenroUsecaser::Result[CreateOrderOutput]
-
-  def call: (Input) -> SenroUsecaser::Result[CreateOrderOutput]
 
   # : (Hash[Symbol, untyped]) -> bool
   def premium_user?: (Hash[Symbol, untyped]) -> bool
@@ -568,7 +566,7 @@ class Step1 < SenroUsecaser::Base
     def initialize: (initial: String, **untyped) -> void
 
     # : () -> String
-    def initial: () -> String
+    attr_reader initial: untyped
   end
 
   class Output
@@ -576,10 +574,10 @@ class Step1 < SenroUsecaser::Base
     def initialize: (step1_data: String, counter: Integer, **untyped) -> void
 
     # : () -> String
-    def step1_data: () -> String
+    attr_reader step1_data: untyped
 
     # : () -> Integer
-    def counter: () -> Integer
+    attr_reader counter: untyped
   end
 
   # : (Input) -> SenroUsecaser::Result[Output]
@@ -592,10 +590,10 @@ class Step2 < SenroUsecaser::Base
     def initialize: (step1_data: String, counter: Integer, **untyped) -> void
 
     # : () -> String
-    def step1_data: () -> String
+    attr_reader step1_data: untyped
 
     # : () -> Integer
-    def counter: () -> Integer
+    attr_reader counter: untyped
   end
 
   class Output
@@ -603,13 +601,13 @@ class Step2 < SenroUsecaser::Base
     def initialize: (step1_data: String, step2_data: String, counter: Integer, **untyped) -> void
 
     # : () -> String
-    def step1_data: () -> String
+    attr_reader step1_data: untyped
 
     # : () -> String
-    def step2_data: () -> String
+    attr_reader step2_data: untyped
 
     # : () -> Integer
-    def counter: () -> Integer
+    attr_reader counter: untyped
   end
 
   # : (Input) -> SenroUsecaser::Result[Output]
@@ -622,13 +620,13 @@ class Step3 < SenroUsecaser::Base
     def initialize: (step1_data: String, step2_data: String, counter: Integer, **untyped) -> void
 
     # : () -> String
-    def step1_data: () -> String
+    attr_reader step1_data: untyped
 
     # : () -> String
-    def step2_data: () -> String
+    attr_reader step2_data: untyped
 
     # : () -> Integer
-    def counter: () -> Integer
+    attr_reader counter: untyped
   end
 
   class Output
@@ -636,19 +634,19 @@ class Step3 < SenroUsecaser::Base
     def initialize: (step1_data: String, step2_data: String, step3_data: String, counter: Integer, final: bool, **untyped) -> void
 
     # : () -> String
-    def step1_data: () -> String
+    attr_reader step1_data: untyped
 
     # : () -> String
-    def step2_data: () -> String
+    attr_reader step2_data: untyped
 
     # : () -> String
-    def step3_data: () -> String
+    attr_reader step3_data: untyped
 
     # : () -> Integer
-    def counter: () -> Integer
+    attr_reader counter: untyped
 
     # : () -> bool
-    def final: () -> bool
+    attr_reader final: untyped
   end
 
   # : (Input) -> SenroUsecaser::Result[Output]
@@ -661,10 +659,10 @@ class WrapAccumulatedOutputUseCase < SenroUsecaser::Base
     def initialize: (counter: Integer, final: bool, **untyped) -> void
 
     # : () -> Integer
-    def counter: () -> Integer
+    attr_reader counter: untyped
 
     # : () -> bool
-    def final: () -> bool
+    attr_reader final: untyped
   end
 
   # : (Input) -> SenroUsecaser::Result[AccumulatedOutput]
@@ -677,13 +675,11 @@ class AccumulatedContextDemo < SenroUsecaser::Base
     def initialize: (initial: String, **untyped) -> void
 
     # : () -> String
-    def initial: () -> String
+    attr_reader initial: untyped
   end
 
   def self.call: (Input, ?container: SenroUsecaser::Container) -> SenroUsecaser::Result[AccumulatedOutput]
 
-  def call: (Input) -> SenroUsecaser::Result[AccumulatedOutput]
-
-  # : (Hash[Symbol, untyped]) -> bool
-  def check_accumulated: (Hash[Symbol, untyped]) -> bool
+  # : (untyped) -> bool
+  def check_accumulated: (untyped) -> bool
 end

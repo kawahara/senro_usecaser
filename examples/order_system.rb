@@ -1,6 +1,8 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
+# rubocop:disable all
+
 # rbs_inline: enabled
 
 require_relative "../lib/senro_usecaser"
@@ -1250,9 +1252,9 @@ class AccumulatedContextDemo < SenroUsecaser::Base
     step WrapAccumulatedOutputUseCase
   end
 
-  #: (Hash[Symbol, untyped]) -> bool
-  def check_accumulated(_ctx)
-    puts "    [AccumulatedContext] step1_data: #{accumulated_context[:step1_data]}"
+  #: (untyped) -> bool
+  def check_accumulated(ctx)
+    puts "    [InputChaining] step1_data: #{ctx.step1_data}"
     true
   end
 end

@@ -1,6 +1,8 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
+# rubocop:disable all
+
 # rbs_inline: enabled
 
 require_relative "../lib/senro_usecaser"
