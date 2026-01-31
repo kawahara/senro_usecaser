@@ -27,11 +27,11 @@ module SenroUsecaser
     # Checks if this step should be executed based on conditions
     #
     #: (untyped, untyped) -> bool
-    def should_execute?(context, use_case_instance)
-      return false if if_condition && !evaluate_condition(if_condition, context, use_case_instance)
-      return false if unless_condition && evaluate_condition(unless_condition, context, use_case_instance)
-      return false if all_conditions && !all_conditions_met?(context, use_case_instance)
-      return false if any_conditions && !any_condition_met?(context, use_case_instance)
+    def should_execute?(input, use_case_instance)
+      return false if if_condition && !evaluate_condition(if_condition, input, use_case_instance)
+      return false if unless_condition && evaluate_condition(unless_condition, input, use_case_instance)
+      return false if all_conditions && !all_conditions_met?(input, use_case_instance)
+      return false if any_conditions && !any_condition_met?(input, use_case_instance)
 
       true
     end
@@ -39,41 +39,41 @@ module SenroUsecaser
     # Maps the input for this step based on input_mapping configuration
     #
     #: (untyped, untyped) -> untyped
-    def map_input(context, use_case_instance)
-      return context unless input_mapping
+    def map_input(input, use_case_instance)
+      return input unless input_mapping
 
       case input_mapping
       when Symbol
-        use_case_instance.send(input_mapping, context)
+        use_case_instance.send(input_mapping, input)
       when Proc
-        input_mapping.call(context)
+        input_mapping.call(input)
       else
-        context
+        input
       end
     end
 
     private
 
     #: ((Symbol | Proc), untyped, untyped) -> bool
-    def evaluate_condition(condition, context, use_case_instance)
+    def evaluate_condition(condition, input, use_case_instance)
       case condition
       when Symbol
-        use_case_instance.send(condition, context)
+        use_case_instance.send(condition, input)
       when Proc
-        condition.call(context)
+        condition.call(input)
       else
         raise ArgumentError, "Invalid condition type: #{condition.class}"
       end
     end
 
     #: (untyped, untyped) -> bool
-    def all_conditions_met?(context, use_case_instance)
-      all_conditions.all? { |cond| evaluate_condition(cond, context, use_case_instance) }
+    def all_conditions_met?(input, use_case_instance)
+      all_conditions.all? { |cond| evaluate_condition(cond, input, use_case_instance) }
     end
 
     #: (untyped, untyped) -> bool
-    def any_condition_met?(context, use_case_instance)
-      any_conditions.any? { |cond| evaluate_condition(cond, context, use_case_instance) }
+    def any_condition_met?(input, use_case_instance)
+      any_conditions.any? { |cond| evaluate_condition(cond, input, use_case_instance) }
     end
   end
 
@@ -363,17 +363,15 @@ module SenroUsecaser
 
     # Performs the UseCase with hooks
     #
-    #: (?untyped, ?capture_exceptions: bool, **untyped) -> Result[untyped]
-    def perform(input = nil, capture_exceptions: false, **args)
+    #: (untyped, ?capture_exceptions: bool) -> Result[untyped]
+    def perform(input, capture_exceptions: false)
       @_capture_exceptions = capture_exceptions
 
-      # Pass input directly to hooks and call
       unless self.class.input_class || self.class.organized_steps
         raise ArgumentError, "#{self.class.name} must define `input` class"
       end
 
-      context = input || args
-      execute_with_hooks(context) do
+      execute_with_hooks(input) do
         call(input)
       end
     end
@@ -420,11 +418,11 @@ module SenroUsecaser
     # Executes the core logic with before/after/around hooks
     #
     #: (untyped) { () -> Result[untyped] } -> Result[untyped]
-    def execute_with_hooks(context, &core_block)
-      execution = build_around_chain(context, core_block)
-      run_before_hooks(context)
+    def execute_with_hooks(input, &core_block)
+      execution = build_around_chain(input, core_block)
+      run_before_hooks(input)
       result = execution.call
-      run_after_hooks(context, result)
+      run_after_hooks(input, result)
       result
     end
 
@@ -440,12 +438,12 @@ module SenroUsecaser
     # Builds the around hook chain
     #
     #: (untyped, Proc) -> Proc
-    def build_around_chain(context, core_block)
+    def build_around_chain(input, core_block)
       wrapped_core = -> { wrap_result(core_block.call) }
       all_around_hooks = collect_around_hooks
 
       all_around_hooks.reverse.reduce(wrapped_core) do |inner, hook|
-        -> { wrap_result(hook.call(context) { inner.call }) }
+        -> { wrap_result(hook.call(input) { inner.call }) }
       end
     end
 
@@ -464,21 +462,21 @@ module SenroUsecaser
     # Runs all before hooks
     #
     #: (untyped) -> void
-    def run_before_hooks(context)
+    def run_before_hooks(input)
       self.class.extensions.each do |ext|
-        ext.send(:before, context) if ext.respond_to?(:before)
+        ext.send(:before, input) if ext.respond_to?(:before)
       end
-      self.class.before_hooks.each { |hook| hook.call(context) }
+      self.class.before_hooks.each { |hook| hook.call(input) }
     end
 
     # Runs all after hooks
     #
     #: (untyped, Result[untyped]) -> void
-    def run_after_hooks(context, result)
+    def run_after_hooks(input, result)
       self.class.extensions.each do |ext|
-        ext.send(:after, context, result) if ext.respond_to?(:after)
+        ext.send(:after, input, result) if ext.respond_to?(:after)
       end
-      self.class.after_hooks.each { |hook| hook.call(context, result) }
+      self.class.after_hooks.each { |hook| hook.call(input, result) }
     end
 
     # Resolves dependencies from the container

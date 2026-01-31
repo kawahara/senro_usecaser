@@ -236,8 +236,8 @@ module SenroUsecaser
 
     # Performs the UseCase with hooks
     #
-    # : (?untyped, ?capture_exceptions: bool, **untyped) -> Result[untyped]
-    def perform: (?untyped, ?capture_exceptions: bool, **untyped) -> Result[untyped]
+    # : (untyped, ?capture_exceptions: bool) -> Result[untyped]
+    def perform: (untyped, ?capture_exceptions: bool) -> Result[untyped]
 
     # Executes the UseCase logic
     #
