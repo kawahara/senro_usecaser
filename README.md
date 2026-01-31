@@ -704,7 +704,8 @@ Use `extend_with` to integrate validation libraries like ActiveModel::Validation
 # Define validation extension
 module InputValidation
   def self.around(context, &block)
-    input = context.values.first  # Get input object
+    input = context[:input]  # Get input object from context
+    return block.call unless input
 
     if input.respond_to?(:validate!)
       begin
@@ -755,18 +756,19 @@ class CreateUserInput
 end
 
 # Apply validation to UseCase
+# Note: Use keyword argument `input:` instead of `input CreateUserInput`
+# to avoid validate! being called during input_to_hash conversion
 class CreateUserUseCase < SenroUsecaser::Base
   extend_with InputValidation, OutputValidation
 
-  input CreateUserInput
-
-  def call(input)
+  def call(input:)
+    # input is already validated by InputValidation hook
     User.create!(name: input.name, email: input.email)
   end
 end
 
 # Validation errors are returned as Result.failure
-result = CreateUserUseCase.call(CreateUserInput.new(name: "", email: "invalid"))
+result = CreateUserUseCase.call(input: CreateUserInput.new(name: "", email: "invalid"))
 result.failure?  # => true
 result.errors.first.field  # => :name
 ```
