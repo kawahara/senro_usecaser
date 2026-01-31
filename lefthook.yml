@@ -1,0 +1,31 @@
+# Lefthook configuration
+# https://github.com/evilmartians/lefthook
+
+pre-commit:
+  parallel: true
+  commands:
+    rubocop:
+      glob: "*.rb"
+      run: bundle exec rubocop {staged_files}
+    steep:
+      glob: "*.rb"
+      run: bundle exec steep check
+
+pre-push:
+  parallel: true
+  commands:
+    rspec:
+      run: bundle exec rspec
+      skip:
+        - merge
+        - rebase
+    rubocop:
+      run: bundle exec rubocop
+      skip:
+        - merge
+        - rebase
+    steep:
+      run: bundle exec steep check
+      skip:
+        - merge
+        - rebase

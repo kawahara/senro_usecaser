@@ -38,6 +38,7 @@ GEM
       concurrent-ruby (~> 1.0)
     json (2.18.0)
     language_server-protocol (3.17.0.5)
+    lefthook (1.13.6)
     lint_roller (1.1.0)
     listen (3.10.0)
       logger
@@ -149,6 +150,7 @@ PLATFORMS
   x86_64-linux-musl
 
 DEPENDENCIES
+  lefthook (~> 1.10)
   rake (~> 13.0)
   rbs (~> 3.7)
   rbs-inline (~> 0.10)
