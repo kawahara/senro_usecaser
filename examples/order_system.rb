@@ -866,7 +866,7 @@ module LoggingExtension
   end
 
   #: (Hash[Symbol, untyped], SenroUsecaser::Result[untyped]) -> void
-  def self.after(context, result)
+  def self.after(_context, result)
     status = result.success? ? "成功" : "失敗"
     puts "  [Logging] UseCase 終了: #{status}"
   end
@@ -1098,7 +1098,7 @@ class Step1 < SenroUsecaser::Base
   output Output
 
   #: (Input) -> SenroUsecaser::Result[Output]
-  def call(input)
+  def call(_input)
     success(Output.new(step1_data: "from step1", counter: 1))
   end
 end

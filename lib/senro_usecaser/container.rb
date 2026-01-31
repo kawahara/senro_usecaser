@@ -196,9 +196,9 @@ module SenroUsecaser
     #   end
     #
     #: ((Symbol | String)) { () -> void } -> void
-    def namespace(name, &block)
+    def namespace(name, &)
       @current_namespace.push(name.to_sym)
-      instance_eval(&block) # steep:ignore BlockTypeMismatch
+      instance_eval(&) # steep:ignore BlockTypeMismatch
     ensure
       @current_namespace.pop
     end

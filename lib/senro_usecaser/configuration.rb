@@ -126,7 +126,7 @@ module SenroUsecaser
       sorted
     end
 
-    #: (singleton(Provider), Array[singleton(Provider)], Hash[singleton(Provider), bool], Hash[singleton(Provider), bool]) -> void
+    #: (singleton(Provider), Array[singleton(Provider)], untyped, untyped) -> void
     def visit(provider, sorted, visited, visiting)
       return if visited[provider]
 

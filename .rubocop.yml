@@ -5,6 +5,8 @@ plugins:
 AllCops:
   TargetRubyVersion: 3.2
   NewCops: enable
+  Exclude:
+    - "examples/**/*"
 
 Style/StringLiterals:
   EnforcedStyle: double_quotes

@@ -49,8 +49,8 @@ module SenroUsecaser
     #   scoped.resolve(:current_user) # => current_user
     #   scoped.resolve(:logger)       # => resolved from parent
     #
-    # : () ?{ [self: Container] () -> void } -> Container
-    def scope: () ?{ (?) -> untyped } -> untyped
+    # : () ?{ () -> void } -> Container
+    def scope: () ?{ () -> void } -> Container
 
     # Registers a dependency in the current namespace
     #

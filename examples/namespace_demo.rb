@@ -149,7 +149,7 @@ module NamespaceDemo
 
         {
           user: user,
-          permissions: user.role == "super_admin" ? [:all] : [:read, :write],
+          permissions: user.role == "super_admin" ? [:all] : %i[read write],
           last_login: Time.now - 3600
         }
       end
@@ -442,7 +442,6 @@ module NamespaceDemo
       success(Output.new(message: "#{current_user.name} がアクションを実行"))
     end
   end
-
 end
 
 # =============================================================================
@@ -686,8 +685,10 @@ puts "-" * 70
 puts "  container.registered_in?(:admin, :user_repository) = #{container.registered_in?(:admin, :user_repository)}"
 puts "  container.registered_in?(:public, :user_repository) = #{container.registered_in?(:public, :user_repository)}"
 puts "  container.registered_in?(:admin, :logger) = #{container.registered_in?(:admin, :logger)} (ルートからフォールバック)"
-puts "  container.registered_in?(\"admin::reports\", :report_generator) = #{container.registered_in?("admin::reports", :report_generator)}"
-puts "  container.registered_in?(\"admin::reports\", :audit_logger) = #{container.registered_in?("admin::reports", :audit_logger)} (adminからフォールバック)"
+puts "  container.registered_in?(\"admin::reports\", :report_generator) = #{container.registered_in?("admin::reports",
+                                                                                                     :report_generator)}"
+puts "  container.registered_in?(\"admin::reports\", :audit_logger) = #{container.registered_in?("admin::reports",
+                                                                                                 :audit_logger)} (adminからフォールバック)"
 puts "  container.registered_in?(:public, :audit_logger) = #{container.registered_in?(:public, :audit_logger)} (存在しない)"
 puts
 

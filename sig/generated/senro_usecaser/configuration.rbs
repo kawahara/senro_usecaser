@@ -74,7 +74,7 @@ module SenroUsecaser
     # : (Array[singleton(Provider)]) -> Array[singleton(Provider)]
     def topological_sort: (Array[singleton(Provider)]) -> Array[singleton(Provider)]
 
-    # : (singleton(Provider), Array[singleton(Provider)], Hash[singleton(Provider), bool], Hash[singleton(Provider), bool]) -> void
-    def visit: (singleton(Provider), Array[singleton(Provider)], Hash[singleton(Provider), bool], Hash[singleton(Provider), bool]) -> void
+    # : (singleton(Provider), Array[singleton(Provider)], untyped, untyped) -> void
+    def visit: (singleton(Provider), Array[singleton(Provider)], untyped, untyped) -> void
   end
 end

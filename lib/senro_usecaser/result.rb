@@ -110,22 +110,18 @@ module SenroUsecaser
     # Returns the value if success, otherwise raises an error
     #
     #: () -> T
-    def value!
+    def value! # steep:ignore MethodBodyTypeMismatch
       raise "Cannot unwrap value from a failure result" if failure?
 
-      # @type var v: untyped
-      v = @value
-      v
+      @value
     end
 
     # Returns the value if success, otherwise returns the given default
     #
     #: [U] (U) -> (T | U)
-    def value_or(default)
+    def value_or(default) # steep:ignore MethodBodyTypeMismatch
       if success?
-        # @type var v: untyped
-        v = @value
-        v
+        @value
       else
         default
       end

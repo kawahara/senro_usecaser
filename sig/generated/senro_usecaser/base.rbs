@@ -320,9 +320,7 @@ module SenroUsecaser
 
     # Calls the UseCase with custom exception handling options
     #
-    # rubocop:disable Layout/LineLength
     # : [T] (input: untyped, ?container: Container, ?exception_classes: Array[Class], ?code: Symbol) -> Result[T]
-    # rubocop:enable Layout/LineLength
     def self.call_with_capture: [T] (input: untyped, ?container: Container, ?exception_classes: Array[Class], ?code: Symbol) -> Result[T]
 
     # @api private
