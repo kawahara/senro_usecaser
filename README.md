@@ -156,6 +156,62 @@ class Admin::Reports::GenerateReportUseCase < SenroUsecaser::Base
 end
 ```
 
+##### Automatic Namespace Inference
+
+Instead of explicitly declaring `namespace`, you can enable automatic inference from the Ruby module structure:
+
+```ruby
+SenroUsecaser.configure do |config|
+  config.infer_namespace_from_module = true
+end
+```
+
+With this enabled, namespaces are automatically derived from module names:
+
+```ruby
+# No explicit namespace declaration needed!
+
+# Module "Admin" → namespace "admin"
+module Admin
+  class CreateUserUseCase < SenroUsecaser::Base
+    depends_on :user_repository  # resolves from admin namespace
+    def call(input); end
+  end
+end
+
+# Module "Admin::Reports" → namespace "admin::reports"
+module Admin
+  module Reports
+    class GenerateReportUseCase < SenroUsecaser::Base
+      depends_on :report_generator  # resolves from admin::reports
+      depends_on :user_repository   # resolves from admin (parent)
+      def call(input); end
+    end
+  end
+end
+
+# Top-level class → no namespace (root)
+class CreateUserUseCase < SenroUsecaser::Base
+  depends_on :logger  # resolves from root
+  def call(input); end
+end
+```
+
+This also works for Providers:
+
+```ruby
+module Admin
+  class ServiceProvider < SenroUsecaser::Provider
+    # Automatically registers in "admin" namespace
+    def register(container)
+      container.register(:admin_service, AdminService.new)
+    end
+  end
+end
+```
+
+**Note:** Explicit `namespace` declarations take precedence over inferred namespaces.
+
 ##### Scoped Containers
 
 Create child containers for request-scoped dependencies (e.g., current_user):
