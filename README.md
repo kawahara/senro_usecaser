@@ -452,7 +452,9 @@ Complex business operations can be composed from simpler UseCases using `organiz
 
 #### organize - Sequential Execution
 
-Execute multiple UseCases in sequence. Each step's output becomes the next step's input (converted to hash for compatibility).
+Execute multiple UseCases in sequence. Each step's output object becomes the next step's input directly (type chaining).
+
+**Important:** All pipeline steps must define an `input` class. The output of step A should be compatible with the input of step B.
 
 ```ruby
 class PlaceOrderUseCase < SenroUsecaser::Base
@@ -470,6 +472,12 @@ class PlaceOrderUseCase < SenroUsecaser::Base
   input Input
   output CreateOrderOutput
 
+  # Each step's output becomes the next step's input:
+  # PlaceOrderUseCase::Input -> ValidateOrderUseCase
+  # ValidateOrderUseCase::Output -> CreateOrderUseCase::Input
+  # CreateOrderUseCase::Output -> ChargePaymentUseCase::Input
+  # ChargePaymentUseCase::Output -> SendConfirmationEmailUseCase::Input
+  # SendConfirmationEmailUseCase::Output -> CreateOrderOutput
   organize do
     step ValidateOrderUseCase
     step CreateOrderUseCase
@@ -551,17 +559,17 @@ class PlaceOrderUseCase < SenroUsecaser::Base
 
   private
 
-  # Condition methods receive the current context (hash)
-  def has_coupon?(context)
-    context[:coupon_code].present?
+  # Condition methods receive the current input object (output from previous step)
+  def has_coupon?(input)
+    input.coupon_code.present?
   end
 
-  def free_order?(context)
-    context[:total].zero?
+  def free_order?(input)
+    input.total.zero?
   end
 
-  def gift_order?(context)
-    context[:gift_recipient].present?
+  def gift_order?(input)
+    input.gift_recipient.present?
   end
 end
 ```
@@ -572,8 +580,8 @@ end
 class PlaceOrderUseCase < SenroUsecaser::Base
   organize do
     step ValidateOrderUseCase
-    step ApplyCouponUseCase, if: ->(ctx) { ctx[:coupon_code].present? }
-    step NotifyAdminUseCase, if: ->(ctx) { ctx[:total] > 10_000 }
+    step ApplyCouponUseCase, if: ->(input) { input.coupon_code.present? }
+    step NotifyAdminUseCase, if: ->(input) { input.total > 10_000 }
   end
 end
 ```
@@ -596,7 +604,7 @@ end
 
 #### Custom Input Mapping
 
-By default, the previous step's output is passed as input to the next step. Use `input:` to customize:
+By default, the previous step's output object is passed directly as input to the next step. Use `input:` to transform it:
 
 ```ruby
 class PlaceOrderUseCase < SenroUsecaser::Base
@@ -604,38 +612,15 @@ class PlaceOrderUseCase < SenroUsecaser::Base
     step ValidateOrderUseCase
     step CreateOrderUseCase
 
-    # Hash mapping: { new_key: :source_key }
-    step ChargePaymentUseCase, input: { amount: :total, user: :customer }
-
-    # Method reference
+    # Method reference - transform current input for next step
     step SendEmailUseCase, input: :prepare_email_input
 
-    # Lambda
-    step NotifyUseCase, input: ->(ctx) { { message: "Order #{ctx[:order_id]}" } }
+    # Lambda - transform current input
+    step NotifyUseCase, input: ->(input) { NotifyInput.new(message: "Order #{input.order_id}") }
   end
 
-  def prepare_email_input(context)
-    { to: context[:customer_email], subject: "Order Confirmation" }
-  end
-end
-```
-
-#### Accumulated Context
-
-Access data from earlier steps (not just the previous one) using `accumulated_context`:
-
-```ruby
-class PlaceOrderUseCase < SenroUsecaser::Base
-  organize do
-    step ValidateOrderUseCase     # Output: { user:, items: }
-    step CreateOrderUseCase       # Output: { order: }
-    step ChargePaymentUseCase     # Output: { payment: }
-    step SendEmailUseCase, if: :should_send_email?
-  end
-
-  def should_send_email?(context)
-    # accumulated_context has all data from previous steps
-    accumulated_context[:user][:email_notifications_enabled]
+  def prepare_email_input(input)
+    SendEmailInput.new(to: input.customer_email, subject: "Order Confirmation")
   end
 end
 ```
@@ -704,11 +689,10 @@ Use `extend_with` to integrate validation libraries like ActiveModel::Validation
 # Define validation extension
 module InputValidation
   def self.around(context, &block)
-    # Access original input via :_original_input key
-    input = context[:_original_input]
-    return block.call unless input&.respond_to?(:validate!)
+    # context is the input object passed to call
+    return block.call unless context.respond_to?(:validate!)
 
-    input.validate!
+    context.validate!
     block.call
   rescue ActiveModel::ValidationError => e
     errors = e.model.errors.map do |error|
@@ -765,11 +749,6 @@ result = CreateUserUseCase.call(input)
 result.failure?  # => true
 result.errors.first.field  # => :name
 ```
-
-> **Note**: When using `input SomeClass` declaration, the original input object is accessible
-> via `context[:_original_input]` in around hooks. This allows validation hooks to access
-> the input before processing without `validate!` being accidentally called during
-> internal hash conversion.
 
 #### Combining Composition Patterns
 
