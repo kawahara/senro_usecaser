@@ -933,7 +933,7 @@ module SenroUsecaser
     #: (singleton(Base), Hash[Symbol, untyped]) -> Result[untyped]
     def call_use_case(use_case_class, input)
       input_class = use_case_class.input_class
-      call_method = (@_capture_exceptions || false) ? :call! : :call #: Symbol
+      call_method = @_capture_exceptions || false ? :call! : :call #: Symbol
 
       if input_class
         # Convert hash to input object for UseCases with input class
