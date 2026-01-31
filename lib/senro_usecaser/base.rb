@@ -864,6 +864,10 @@ module SenroUsecaser
         next unless step.should_execute?(current_input, self)
 
         step_result = execute_step(step, current_input)
+
+        # Per-step on_failure: :stop overrides global :continue
+        return step_result if step_result.failure? && step.on_failure == :stop
+
         current_input = result_to_input(step_result)
         merge_to_accumulated_context(current_input) if step_result.success?
         result = step_result
@@ -886,6 +890,9 @@ module SenroUsecaser
         result = execute_step(step, current_input)
         collected_errors, last_success_result, current_input =
           process_collect_result(result, collected_errors, last_success_result, current_input)
+
+        # Per-step on_failure: :stop overrides global :collect
+        break if result.failure? && step.on_failure == :stop
       end
 
       collected_errors.any? ? Result.failure(*collected_errors) : (last_success_result || success(current_input))
@@ -926,7 +933,7 @@ module SenroUsecaser
     #: (singleton(Base), Hash[Symbol, untyped]) -> Result[untyped]
     def call_use_case(use_case_class, input)
       input_class = use_case_class.input_class
-      call_method = @_capture_exceptions ? :call! : :call
+      call_method = (@_capture_exceptions || false) ? :call! : :call #: Symbol
 
       if input_class
         # Convert hash to input object for UseCases with input class
@@ -937,7 +944,8 @@ module SenroUsecaser
       end
     rescue ArgumentError
       # Fallback to keyword arguments if input class doesn't accept the hash
-      use_case_class.public_send(call_method, nil, container: @_container, **input)
+      method_name = call_method #: Symbol
+      use_case_class.public_send(method_name, nil, container: @_container, **input)
     end
 
     # Converts a result to input for the next UseCase

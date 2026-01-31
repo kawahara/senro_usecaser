@@ -312,8 +312,21 @@ module SenroUsecaser
 
     # Calls the UseCase and captures any exceptions as failures
     #
+    # When used with organize pipelines, each step is also called with call!,
+    # allowing exceptions to be collected when using on_failure: :collect.
+    #
     # @example
     #   CreateUserUseCase.call!(input)
+    #
+    # @example With organize and :collect
+    #   class PlaceOrderUseCase < SenroUsecaser::Base
+    #     organize on_failure: :collect do
+    #       step ValidateOrderUseCase   # Exception -> Result.failure, collected
+    #       step ChargePaymentUseCase   # Exception -> Result.failure, collected
+    #     end
+    #   end
+    #   result = PlaceOrderUseCase.call!(input)
+    #   result.errors  # Contains all collected errors including from exceptions
     #
     # : [T] (?untyped, ?container: Container, **untyped) -> Result[T]
     def self.call!: [T] (?untyped, ?container: Container, **untyped) -> Result[T]
@@ -350,8 +363,8 @@ module SenroUsecaser
     # This is the entry point called by class methods.
     # It wraps the call method with before/after/around hooks.
     #
-    # : (?untyped, **untyped) -> Result[untyped]
-    def perform: (?untyped, **untyped) -> Result[untyped]
+    # : (?untyped, ?capture_exceptions: bool, **untyped) -> Result[untyped]
+    def perform: (?untyped, ?capture_exceptions: bool, **untyped) -> Result[untyped]
 
     # Executes the UseCase logic
     #
@@ -427,6 +440,17 @@ module SenroUsecaser
     #
     # : (Hash[Symbol, untyped]) { () -> Result[untyped] } -> Result[untyped]
     def execute_with_hooks: (Hash[Symbol, untyped]) { () -> Result[untyped] } -> Result[untyped]
+
+    # Wraps a non-Result value in Result.success
+    # This allows call methods to return plain values instead of explicit Result objects
+    #
+    # @example
+    #   def call(name:)
+    #     User.create(name: name)  # Automatically wrapped as Result.success(user)
+    #   end
+    #
+    # : (untyped) -> Result[untyped]
+    def wrap_result: (untyped) -> Result[untyped]
 
     # Builds the around hook chain
     #
@@ -526,6 +550,7 @@ module SenroUsecaser
     def step_should_stop?: (Step) -> bool
 
     # Calls a single UseCase in the pipeline
+    # Uses call! if the parent UseCase was invoked with call! (capture_exceptions mode)
     #
     # : (singleton(Base), Hash[Symbol, untyped]) -> Result[untyped]
     def call_use_case: (singleton(Base), Hash[Symbol, untyped]) -> Result[untyped]

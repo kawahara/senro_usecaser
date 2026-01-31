@@ -1166,6 +1166,86 @@ RSpec.describe SenroUsecaser::Base do
 
         expect(result).to be_failure
       end
+
+      it "per-step :stop overrides global :continue" do
+        call_count = 0
+        success_step = Class.new(described_class) do
+          define_method(:call) do |**args|
+            success(args)
+          end
+        end
+
+        normal_fail = Class.new(described_class) do
+          def call(**_args)
+            failure(SenroUsecaser::Error.new(code: :normal, message: "Normal failure"))
+          end
+        end
+
+        critical_fail = Class.new(described_class) do
+          def call(**_args)
+            failure(SenroUsecaser::Error.new(code: :critical, message: "Critical failure"))
+          end
+        end
+
+        tracking_step = Class.new(described_class) do
+          define_method(:call) do |**args|
+            call_count += 1
+            success(args.merge(tracked: true))
+          end
+        end
+
+        organized = Class.new(described_class) do
+          organize on_failure: :continue do
+            step success_step
+            step normal_fail                        # continues due to global :continue
+            step critical_fail, on_failure: :stop   # stops here
+            step tracking_step                      # should not run
+          end
+        end
+
+        result = organized.call(value: 1)
+
+        expect(result).to be_failure
+        expect(result.errors.first.code).to eq(:critical)
+        expect(call_count).to eq(0)
+      end
+
+      it "per-step :stop overrides global :collect and collects errors up to that point" do
+        call_count = 0
+        fail1 = Class.new(described_class) do
+          def call(**_args)
+            failure(SenroUsecaser::Error.new(code: :error1, message: "Error 1"))
+          end
+        end
+
+        fail2_critical = Class.new(described_class) do
+          def call(**_args)
+            failure(SenroUsecaser::Error.new(code: :error2_critical, message: "Error 2 critical"))
+          end
+        end
+
+        tracking_step = Class.new(described_class) do
+          define_method(:call) do |**args|
+            call_count += 1
+            success(args)
+          end
+        end
+
+        organized = Class.new(described_class) do
+          organize on_failure: :collect do
+            step fail1                               # collected
+            step fail2_critical, on_failure: :stop   # collected then stops
+            step tracking_step                       # should not run
+          end
+        end
+
+        result = organized.call(value: 1)
+
+        expect(result).to be_failure
+        expect(result.errors.size).to eq(2)
+        expect(result.errors.map(&:code)).to eq(%i[error1 error2_critical])
+        expect(call_count).to eq(0)
+      end
     end
 
     describe "accumulated_context" do
