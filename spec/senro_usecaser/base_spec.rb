@@ -1896,4 +1896,166 @@ RSpec.describe SenroUsecaser::Base do
       end
     end
   end
+
+  describe "input/output validation with extend_with" do
+    # Input class with validation
+    let(:validatable_input_class) do
+      Class.new do
+        attr_reader :name, :email
+
+        def initialize(name:, email:)
+          @name = name
+          @email = email
+        end
+
+        def validate!
+          raise ArgumentError, "name is required" if name.nil? || name.empty?
+          raise ArgumentError, "email must contain @" unless email.include?("@")
+        end
+
+        def valid?
+          validate!
+          true
+        rescue ArgumentError
+          false
+        end
+      end
+    end
+
+    # Input validation module
+    let(:input_validation_module) do
+      Module.new do
+        def self.around(context, &block)
+          input = context[:_original_input]
+          return block.call unless input.respond_to?(:validate!)
+
+          input.validate!
+          block.call
+        rescue StandardError => e
+          SenroUsecaser::Result.failure(SenroUsecaser::Error.new(code: :validation_error, message: e.message))
+        end
+      end
+    end
+
+    context "with input class declaration (input CreateUserInput format)" do
+      it "validates input via around hook before call" do
+        input_class = validatable_input_class
+        validation_module = input_validation_module
+
+        use_case = Class.new(described_class) do
+          input input_class
+          extend_with validation_module
+
+          def call(input)
+            success({ name: input.name, email: input.email })
+          end
+        end
+
+        # Valid input
+        valid_input = input_class.new(name: "Taro", email: "taro@example.com")
+        result = use_case.call(valid_input)
+
+        expect(result).to be_success
+        expect(result.value[:name]).to eq("Taro")
+      end
+
+      it "returns failure when validation fails" do
+        input_class = validatable_input_class
+        validation_module = input_validation_module
+
+        use_case = Class.new(described_class) do
+          input input_class
+          extend_with validation_module
+
+          def call(input)
+            success({ name: input.name, email: input.email })
+          end
+        end
+
+        # Invalid input (missing @)
+        invalid_input = input_class.new(name: "Taro", email: "invalid-email")
+        result = use_case.call(invalid_input)
+
+        expect(result).to be_failure
+        expect(result.errors.first.code).to eq(:validation_error)
+        expect(result.errors.first.message).to eq("email must contain @")
+      end
+
+      it "input_to_hash does not call validate! method" do
+        input_class = validatable_input_class
+
+        use_case = Class.new(described_class) do
+          input input_class
+
+          def call(input)
+            success({ name: input.name, email: input.email })
+          end
+        end
+
+        # Create input with invalid email - if validate! was called by input_to_hash,
+        # this would raise an exception instead of returning failure
+        invalid_input = input_class.new(name: "Taro", email: "invalid-email")
+
+        # Should not raise exception during input_to_hash
+        expect { use_case.call(invalid_input) }.not_to raise_error
+      end
+
+      it "input_to_hash excludes bang methods" do
+        input_class = Class.new do
+          attr_reader :value
+
+          def initialize(value:)
+            @value = value
+          end
+
+          def process!
+            @value = @value.upcase
+          end
+        end
+
+        use_case = Class.new(described_class) do
+          input input_class
+
+          def call(input)
+            success({ value: input.value })
+          end
+        end
+
+        input = input_class.new(value: "hello")
+        result = use_case.call(input)
+
+        # value should remain "hello", not "HELLO"
+        expect(result).to be_success
+        expect(result.value[:value]).to eq("hello")
+      end
+    end
+
+    context "when storing original input for validation" do
+      it "passes original input to around hook via context" do
+        input_class = validatable_input_class
+        received_input = nil
+
+        validation_module = Module.new do
+          define_singleton_method(:around) do |context, &block|
+            received_input = context[:_original_input]
+            block.call
+          end
+        end
+
+        use_case = Class.new(described_class) do
+          input input_class
+          extend_with validation_module
+
+          def call(input)
+            success({ name: input.name })
+          end
+        end
+
+        input = input_class.new(name: "Test", email: "test@example.com")
+        use_case.call(input)
+
+        expect(received_input).to eq(input)
+      end
+    end
+  end
 end

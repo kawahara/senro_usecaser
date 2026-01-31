@@ -82,6 +82,10 @@ module SenroUsecaser
   #     end
   #   end
   class Base
+    # Methods to exclude from input_to_hash conversion
+    # These methods may have side effects or are not intended as data accessors
+    EXCLUDED_INPUT_METHODS: untyped
+
     # Declares a dependency to be injected from the container
     #
     # @example Without type (untyped)
@@ -407,6 +411,21 @@ module SenroUsecaser
     #
     # : (Hash[Symbol, untyped]) -> untyped
     def hash_to_input: (Hash[Symbol, untyped]) -> untyped
+
+    # Builds effective arguments from input object or keyword args
+    #
+    # : (untyped, Hash[Symbol, untyped]) -> Hash[Symbol, untyped]
+    def build_effective_args: (untyped, Hash[Symbol, untyped]) -> Hash[Symbol, untyped]
+
+    # Builds context hash with original input for validation hooks
+    #
+    # : (untyped, Hash[Symbol, untyped]) -> Hash[Symbol, untyped]
+    def build_context_with_input: (untyped, Hash[Symbol, untyped]) -> Hash[Symbol, untyped]
+
+    # Executes the call method with appropriate input
+    #
+    # : (untyped, Hash[Symbol, untyped]) -> untyped
+    def execute_call: (untyped, Hash[Symbol, untyped]) -> untyped
 
     # Creates a failure Result from an exception
     #

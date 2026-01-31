@@ -122,6 +122,13 @@ module SenroUsecaser
   #     end
   #   end
   class Base
+    # Methods to exclude from input_to_hash conversion
+    # These methods may have side effects or are not intended as data accessors
+    EXCLUDED_INPUT_METHODS = %i[
+      validate! validate valid? invalid? errors validation_errors
+      run_validations! run_validations
+    ].freeze
+
     class << self
       # Declares a dependency to be injected from the container
       #
@@ -504,24 +511,12 @@ module SenroUsecaser
       # Store capture_exceptions flag for use in pipeline steps
       @_capture_exceptions = capture_exceptions
 
-      # Convert input object to hash if provided
-      effective_args = if input && self.class.input_class
-                         input_to_hash(input)
-                       elsif input.is_a?(Hash)
-                         input
-                       else
-                         args
-                       end
+      effective_args = build_effective_args(input, args)
+      context_with_input = build_context_with_input(input, effective_args)
 
       # Determine how to call based on whether input class is defined
-      execute_with_hooks(effective_args) do
-        if self.class.input_class
-          # Convert hash back to input object for call
-          input_obj = input || hash_to_input(effective_args)
-          call(input_obj)
-        else
-          call(**effective_args)
-        end
+      execute_with_hooks(context_with_input) do
+        execute_call(input, effective_args)
       end
     end
 
@@ -571,8 +566,11 @@ module SenroUsecaser
     def input_to_hash(input)
       return input if input.is_a?(Hash)
 
-      # Get all public reader methods (excluding Object methods)
+      # Get all public reader methods (excluding Object methods and validation methods)
       methods = input.class.instance_methods(false).select do |m|
+        next false if EXCLUDED_INPUT_METHODS.include?(m)
+        next false if m.end_with?("!") # Exclude bang methods (may have side effects)
+
         input.class.instance_method(m).arity.zero?
       end
 
@@ -596,6 +594,40 @@ module SenroUsecaser
     rescue ArgumentError
       # If the input class doesn't accept these kwargs, return hash
       hash
+    end
+
+    # Builds effective arguments from input object or keyword args
+    #
+    #: (untyped, Hash[Symbol, untyped]) -> Hash[Symbol, untyped]
+    def build_effective_args(input, args)
+      if input && self.class.input_class
+        input_to_hash(input)
+      elsif input.is_a?(Hash)
+        input
+      else
+        args
+      end
+    end
+
+    # Builds context hash with original input for validation hooks
+    #
+    #: (untyped, Hash[Symbol, untyped]) -> Hash[Symbol, untyped]
+    def build_context_with_input(input, effective_args)
+      return effective_args unless input && self.class.input_class
+
+      effective_args.merge(_original_input: input)
+    end
+
+    # Executes the call method with appropriate input
+    #
+    #: (untyped, Hash[Symbol, untyped]) -> untyped
+    def execute_call(input, effective_args)
+      if self.class.input_class
+        input_obj = input || hash_to_input(effective_args)
+        call(input_obj)
+      else
+        call(**effective_args)
+      end
     end
 
     # Creates a failure Result from an exception

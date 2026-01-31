@@ -704,26 +704,21 @@ Use `extend_with` to integrate validation libraries like ActiveModel::Validation
 # Define validation extension
 module InputValidation
   def self.around(context, &block)
-    input = context[:input]  # Get input object from context
-    return block.call unless input
+    # Access original input via :_original_input key
+    input = context[:_original_input]
+    return block.call unless input&.respond_to?(:validate!)
 
-    if input.respond_to?(:validate!)
-      begin
-        input.validate!
-        block.call
-      rescue ActiveModel::ValidationError => e
-        errors = e.model.errors.map do |error|
-          SenroUsecaser::Error.new(
-            code: :validation_error,
-            field: error.attribute,
-            message: error.full_message
-          )
-        end
-        SenroUsecaser::Result.failure(*errors)
-      end
-    else
-      block.call
+    input.validate!
+    block.call
+  rescue ActiveModel::ValidationError => e
+    errors = e.model.errors.map do |error|
+      SenroUsecaser::Error.new(
+        code: :validation_error,
+        field: error.attribute,
+        message: error.full_message
+      )
     end
+    SenroUsecaser::Result.failure(*errors)
   end
 end
 
@@ -732,9 +727,7 @@ module OutputValidation
     return unless result.success?
 
     output = result.value
-    if output.respond_to?(:validate!)
-      output.validate!
-    end
+    output.validate! if output.respond_to?(:validate!)
   rescue ActiveModel::ValidationError => e
     Rails.logger.error("Output validation failed: #{e.message}")
   end
@@ -755,23 +748,28 @@ class CreateUserInput
   end
 end
 
-# Apply validation to UseCase
-# Note: Use keyword argument `input:` instead of `input CreateUserInput`
-# to avoid validate! being called during input_to_hash conversion
+# Apply validation to UseCase using input class declaration
 class CreateUserUseCase < SenroUsecaser::Base
+  input CreateUserInput
   extend_with InputValidation, OutputValidation
 
-  def call(input:)
-    # input is already validated by InputValidation hook
-    User.create!(name: input.name, email: input.email)
+  def call(user_input)
+    # user_input is already validated by InputValidation hook
+    User.create!(name: user_input.name, email: user_input.email)
   end
 end
 
-# Validation errors are returned as Result.failure
-result = CreateUserUseCase.call(input: CreateUserInput.new(name: "", email: "invalid"))
+# Usage - pass input object directly
+input = CreateUserInput.new(name: "", email: "invalid")
+result = CreateUserUseCase.call(input)
 result.failure?  # => true
 result.errors.first.field  # => :name
 ```
+
+> **Note**: When using `input SomeClass` declaration, the original input object is accessible
+> via `context[:_original_input]` in around hooks. This allows validation hooks to access
+> the input before processing without `validate!` being accidentally called during
+> internal hash conversion.
 
 #### Combining Composition Patterns
 
