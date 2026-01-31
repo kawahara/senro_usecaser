@@ -410,17 +410,30 @@ module SenroUsecaser
       #
       #: [T] (?untyped, ?container: Container, **untyped) -> Result[T]
       def call(input = nil, container: nil, **args)
-        new(container: container).perform(input, **args)
+        new(container: container).perform(input, capture_exceptions: false, **args)
       end
 
       # Calls the UseCase and captures any exceptions as failures
       #
+      # When used with organize pipelines, each step is also called with call!,
+      # allowing exceptions to be collected when using on_failure: :collect.
+      #
       # @example
       #   CreateUserUseCase.call!(input)
       #
+      # @example With organize and :collect
+      #   class PlaceOrderUseCase < SenroUsecaser::Base
+      #     organize on_failure: :collect do
+      #       step ValidateOrderUseCase   # Exception -> Result.failure, collected
+      #       step ChargePaymentUseCase   # Exception -> Result.failure, collected
+      #     end
+      #   end
+      #   result = PlaceOrderUseCase.call!(input)
+      #   result.errors  # Contains all collected errors including from exceptions
+      #
       #: [T] (?untyped, ?container: Container, **untyped) -> Result[T]
       def call!(input = nil, container: nil, **args)
-        new(container: container).perform(input, **args)
+        new(container: container).perform(input, capture_exceptions: true, **args)
       rescue StandardError => e
         Result.from_exception(e)
       end
@@ -486,8 +499,11 @@ module SenroUsecaser
     # This is the entry point called by class methods.
     # It wraps the call method with before/after/around hooks.
     #
-    #: (?untyped, **untyped) -> Result[untyped]
-    def perform(input = nil, **args)
+    #: (?untyped, ?capture_exceptions: bool, **untyped) -> Result[untyped]
+    def perform(input = nil, capture_exceptions: false, **args)
+      # Store capture_exceptions flag for use in pipeline steps
+      @_capture_exceptions = capture_exceptions
+
       # Convert input object to hash if provided
       effective_args = if input && self.class.input_class
                          input_to_hash(input)
@@ -633,16 +649,35 @@ module SenroUsecaser
       result
     end
 
+    # Wraps a non-Result value in Result.success
+    # This allows call methods to return plain values instead of explicit Result objects
+    #
+    # @example
+    #   def call(name:)
+    #     User.create(name: name)  # Automatically wrapped as Result.success(user)
+    #   end
+    #
+    #: (untyped) -> Result[untyped]
+    def wrap_result(value)
+      return value if value.is_a?(Result)
+
+      Result.success(value)
+    end
+
     # Builds the around hook chain
     #
     #: (Hash[Symbol, untyped], Proc) -> Proc
     def build_around_chain(context, core_block)
+      # Wrap core_block to ensure it returns a Result
+      # This allows call methods to return plain values instead of explicit Result objects
+      wrapped_core = -> { wrap_result(core_block.call) }
+
       # Collect all around hooks (from extensions and block-based)
       all_around_hooks = collect_around_hooks
 
       # Build chain from inside out
-      all_around_hooks.reverse.reduce(core_block) do |inner, hook|
-        -> { hook.call(context) { inner.call } }
+      all_around_hooks.reverse.reduce(wrapped_core) do |inner, hook|
+        -> { wrap_result(hook.call(context) { inner.call }) }
       end
     end
 
@@ -886,20 +921,23 @@ module SenroUsecaser
     end
 
     # Calls a single UseCase in the pipeline
+    # Uses call! if the parent UseCase was invoked with call! (capture_exceptions mode)
     #
     #: (singleton(Base), Hash[Symbol, untyped]) -> Result[untyped]
     def call_use_case(use_case_class, input)
       input_class = use_case_class.input_class
+      call_method = @_capture_exceptions ? :call! : :call
+
       if input_class
         # Convert hash to input object for UseCases with input class
         input_obj = input_class.new(**input)
-        use_case_class.call(input_obj, container: @_container)
+        use_case_class.public_send(call_method, input_obj, container: @_container)
       else
-        use_case_class.call(nil, container: @_container, **input)
+        use_case_class.public_send(call_method, nil, container: @_container, **input)
       end
     rescue ArgumentError
       # Fallback to keyword arguments if input class doesn't accept the hash
-      use_case_class.call(nil, container: @_container, **input)
+      use_case_class.public_send(call_method, nil, container: @_container, **input)
     end
 
     # Converts a result to input for the next UseCase

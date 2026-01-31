@@ -75,6 +75,111 @@ RSpec.describe SenroUsecaser::Base do
       expect(result.errors.first.message).to eq("Error occurred")
       expect(result.errors.first.code).to eq(:exception)
     end
+
+    context "with organize pipeline" do
+      it "captures exceptions in steps and collects them with on_failure: :collect" do
+        raising_step1 = Class.new(described_class) do
+          def call(**_args)
+            raise StandardError, "Error in step 1"
+          end
+        end
+
+        raising_step2 = Class.new(described_class) do
+          def call(**_args)
+            raise StandardError, "Error in step 2"
+          end
+        end
+
+        organized = Class.new(described_class) do
+          organize raising_step1, raising_step2, on_failure: :collect
+        end
+
+        result = organized.call!(value: 1)
+
+        expect(result).to be_failure
+        expect(result.errors.size).to eq(2)
+        expect(result.errors.map(&:message)).to eq(["Error in step 1", "Error in step 2"])
+        expect(result.errors.map(&:code)).to eq(%i[exception exception])
+      end
+
+      it "collects both exceptions and explicit failures" do
+        raising_step = Class.new(described_class) do
+          def call(**_args)
+            raise StandardError, "Exception error"
+          end
+        end
+
+        failure_step = Class.new(described_class) do
+          def call(**_args)
+            failure(SenroUsecaser::Error.new(code: :validation_error, message: "Validation failed"))
+          end
+        end
+
+        organized = Class.new(described_class) do
+          organize raising_step, failure_step, on_failure: :collect
+        end
+
+        result = organized.call!(value: 1)
+
+        expect(result).to be_failure
+        expect(result.errors.size).to eq(2)
+        expect(result.errors.map(&:code)).to eq(%i[exception validation_error])
+      end
+
+      it "stops on first exception with on_failure: :stop (default)" do
+        call_count = 0
+        raising_step = Class.new(described_class) do
+          define_method(:call) do |**_args|
+            raise StandardError, "Error in step"
+          end
+        end
+
+        tracking_step = Class.new(described_class) do
+          define_method(:call) do |**_args|
+            call_count += 1
+            success({ tracked: true })
+          end
+        end
+
+        organized = Class.new(described_class) do
+          organize raising_step, tracking_step
+        end
+
+        result = organized.call!(value: 1)
+
+        expect(result).to be_failure
+        expect(result.errors.size).to eq(1)
+        expect(call_count).to eq(0)
+      end
+
+      it "chains call! to nested organize pipelines" do
+        inner_raising_step = Class.new(described_class) do
+          def call(**_args)
+            raise StandardError, "Inner error"
+          end
+        end
+
+        inner_organized = Class.new(described_class) do
+          organize inner_raising_step, on_failure: :collect
+        end
+
+        outer_raising_step = Class.new(described_class) do
+          def call(**_args)
+            raise StandardError, "Outer error"
+          end
+        end
+
+        outer_organized = Class.new(described_class) do
+          organize inner_organized, outer_raising_step, on_failure: :collect
+        end
+
+        result = outer_organized.call!(value: 1)
+
+        expect(result).to be_failure
+        expect(result.errors.size).to eq(2)
+        expect(result.errors.map(&:message)).to eq(["Inner error", "Outer error"])
+      end
+    end
   end
 
   describe ".call_with_capture" do
@@ -1484,6 +1589,230 @@ RSpec.describe SenroUsecaser::Base do
         child.call
 
         expect(call_order).to eq(%i[parent_before child_before call])
+      end
+    end
+  end
+
+  describe "implicit success wrapping" do
+    describe "single UseCase" do
+      it "wraps plain value in Result.success" do
+        use_case = Class.new(described_class) do
+          def call(value:)
+            value * 2
+          end
+        end
+
+        result = use_case.call(value: 21)
+
+        expect(result).to be_success
+        expect(result.value).to eq(42)
+      end
+
+      it "wraps nil in Result.success" do
+        use_case = Class.new(described_class) do
+          def call(**_args)
+            nil
+          end
+        end
+
+        result = use_case.call
+
+        expect(result).to be_success
+        expect(result.value).to be_nil
+      end
+
+      it "wraps Hash in Result.success" do
+        use_case = Class.new(described_class) do
+          def call(name:)
+            { user: name, created: true }
+          end
+        end
+
+        result = use_case.call(name: "Taro")
+
+        expect(result).to be_success
+        expect(result.value).to eq({ user: "Taro", created: true })
+      end
+
+      it "wraps String in Result.success" do
+        use_case = Class.new(described_class) do
+          def call(name:)
+            "Hello, #{name}!"
+          end
+        end
+
+        result = use_case.call(name: "World")
+
+        expect(result).to be_success
+        expect(result.value).to eq("Hello, World!")
+      end
+
+      it "wraps Array in Result.success" do
+        use_case = Class.new(described_class) do
+          def call(count:)
+            (1..count).to_a
+          end
+        end
+
+        result = use_case.call(count: 3)
+
+        expect(result).to be_success
+        expect(result.value).to eq([1, 2, 3])
+      end
+
+      it "wraps custom object in Result.success" do
+        user_class = Struct.new(:name, :email)
+
+        use_case = Class.new(described_class) do
+          define_method(:call) do |name:, email:|
+            user_class.new(name, email)
+          end
+        end
+
+        result = use_case.call(name: "Taro", email: "taro@example.com")
+
+        expect(result).to be_success
+        expect(result.value.name).to eq("Taro")
+        expect(result.value.email).to eq("taro@example.com")
+      end
+
+      it "does not double-wrap explicit Result.success" do
+        use_case = Class.new(described_class) do
+          def call(value:)
+            success(value)
+          end
+        end
+
+        result = use_case.call(value: "explicit")
+
+        expect(result).to be_success
+        expect(result.value).to eq("explicit")
+      end
+
+      it "does not wrap explicit Result.failure" do
+        use_case = Class.new(described_class) do
+          def call(**_args)
+            failure(SenroUsecaser::Error.new(code: :error, message: "Failed"))
+          end
+        end
+
+        result = use_case.call
+
+        expect(result).to be_failure
+        expect(result.errors.first.code).to eq(:error)
+      end
+    end
+
+    describe "pipeline with implicit success" do
+      it "wraps step results in Result.success" do
+        step1 = Class.new(described_class) do
+          def call(value:)
+            { value: value, step1: true }
+          end
+        end
+
+        step2 = Class.new(described_class) do
+          def call(value:, step1:)
+            { value: value * 2, step1: step1, step2: true }
+          end
+        end
+
+        organized = Class.new(described_class) do
+          organize step1, step2
+        end
+
+        result = organized.call(value: 10)
+
+        expect(result).to be_success
+        expect(result.value).to eq({ value: 20, step1: true, step2: true })
+      end
+
+      it "works with mixed explicit and implicit success" do
+        implicit_step = Class.new(described_class) do
+          def call(value:)
+            { value: value, implicit: true }
+          end
+        end
+
+        explicit_step = Class.new(described_class) do
+          def call(value:, implicit:)
+            success({ value: value * 2, implicit: implicit, explicit: true })
+          end
+        end
+
+        organized = Class.new(described_class) do
+          organize implicit_step, explicit_step
+        end
+
+        result = organized.call(value: 5)
+
+        expect(result).to be_success
+        expect(result.value).to eq({ value: 10, implicit: true, explicit: true })
+      end
+
+      it "stops pipeline on explicit failure" do
+        implicit_step = Class.new(described_class) do
+          def call(**_args)
+            failure(SenroUsecaser::Error.new(code: :failed, message: "Stop here"))
+          end
+        end
+
+        never_called = Class.new(described_class) do
+          def call(**_args)
+            { should_not: :reach }
+          end
+        end
+
+        organized = Class.new(described_class) do
+          organize implicit_step, never_called
+        end
+
+        result = organized.call(value: 1)
+
+        expect(result).to be_failure
+        expect(result.errors.first.code).to eq(:failed)
+      end
+    end
+
+    describe "with hooks" do
+      it "after hook receives wrapped Result" do
+        received_result = nil
+
+        use_case = Class.new(described_class) do
+          after { |_ctx, result| received_result = result }
+
+          def call(value:)
+            value * 3
+          end
+        end
+
+        use_case.call(value: 7)
+
+        expect(received_result).to be_a(SenroUsecaser::Result)
+        expect(received_result).to be_success
+        expect(received_result.value).to eq(21)
+      end
+
+      it "around hook can modify wrapped Result" do
+        use_case = Class.new(described_class) do
+          around do |_ctx, &block|
+            result = block.call
+            if result.success?
+              SenroUsecaser::Result.success(result.value + 100)
+            else
+              result
+            end
+          end
+
+          def call(value:)
+            value * 2
+          end
+        end
+
+        result = use_case.call(value: 5)
+
+        expect(result).to be_success
+        expect(result.value).to eq(110) # (5 * 2) + 100
       end
     end
   end

@@ -842,6 +842,136 @@ input = CreateUserUseCase::Input.new(name: "Taro", email: "taro@example.com")
 result = CreateUserUseCase.call(input)
 ```
 
+### Calling UseCases
+
+#### `.call` vs `.call!`
+
+SenroUsecaser provides two methods for invoking a UseCase:
+
+**`.call`** - Standard invocation. Exceptions are not automatically caught.
+
+```ruby
+result = CreateUserUseCase.call(input)
+# If an unhandled exception is raised, it propagates up
+```
+
+**`.call!`** - Safe invocation. Any `StandardError` is caught and converted to `Result.failure`.
+
+```ruby
+result = CreateUserUseCase.call!(input)
+# If User.create raises an exception, result is:
+# Result.failure(Error.new(code: :exception, message: "...", cause: exception))
+
+if result.failure?
+  error = result.errors.first
+  error.code     # => :exception
+  error.message  # => Exception message
+  error.cause    # => Original exception object
+end
+```
+
+Use `.call!` when you want to ensure all exceptions are captured as `Result.failure` without explicit rescue blocks in your UseCase.
+
+#### Exception Handling in Pipelines
+
+When using `.call!` with `organize` pipelines, the exception capture behavior is **chained** to all steps. This is especially useful with `on_failure: :collect`:
+
+```ruby
+class PlaceOrderUseCase < SenroUsecaser::Base
+  organize on_failure: :collect do
+    step ValidateOrderUseCase   # Raises exception -> captured as Result.failure
+    step ChargePaymentUseCase   # Raises exception -> captured as Result.failure
+    step SendEmailUseCase       # Returns explicit failure
+  end
+end
+
+result = PlaceOrderUseCase.call!(input)
+# All errors (from exceptions and explicit failures) are collected
+result.errors  # => [exception_error_1, exception_error_2, explicit_error]
+```
+
+**Behavior comparison:**
+
+| Call method | Pipeline step behavior | Exception handling |
+|-------------|----------------------|-------------------|
+| `.call`     | Steps use `.call`    | Exception propagates up |
+| `.call!`    | Steps use `.call!`   | Exception → `Result.failure`, collected if `:collect` |
+
+This chaining also applies to nested pipelines:
+
+```ruby
+class InnerUseCase < SenroUsecaser::Base
+  organize on_failure: :collect do
+    step StepA  # Raises exception
+  end
+end
+
+class OuterUseCase < SenroUsecaser::Base
+  organize on_failure: :collect do
+    step InnerUseCase  # Inner exception is captured
+    step StepB         # Raises exception
+  end
+end
+
+result = OuterUseCase.call!(input)
+result.errors  # => [inner_exception_error, step_b_exception_error]
+```
+
+#### Implicit Success Wrapping
+
+By default, if a `call` method returns a non-Result value, it is automatically wrapped in `Result.success`. This allows for more concise UseCase implementations.
+
+```ruby
+# Explicit success (traditional style)
+class CreateUserUseCase < SenroUsecaser::Base
+  def call(input)
+    user = User.create(name: input.name)
+    success(user)  # Explicitly wrap in Result.success
+  end
+end
+
+# Implicit success (concise style)
+class CreateUserUseCase < SenroUsecaser::Base
+  def call(input)
+    User.create(name: input.name)  # Automatically wrapped as Result.success(user)
+  end
+end
+```
+
+This works with any return type:
+
+```ruby
+class GetUserUseCase < SenroUsecaser::Base
+  def call(id:)
+    User.find(id)  # Returns Result.success(user)
+  end
+end
+
+class ListUsersUseCase < SenroUsecaser::Base
+  def call(**_args)
+    User.all.to_a  # Returns Result.success([user1, user2, ...])
+  end
+end
+
+class CheckHealthUseCase < SenroUsecaser::Base
+  def call(**_args)
+    nil  # Returns Result.success(nil)
+  end
+end
+```
+
+**Note:** Explicit `failure(...)` calls are never wrapped - they remain as `Result.failure`.
+
+```ruby
+class CreateUserUseCase < SenroUsecaser::Base
+  def call(input)
+    return failure(Error.new(code: :invalid, message: "Name required")) if input.name.empty?
+
+    User.create(name: input.name)  # Implicit success
+  end
+end
+```
+
 ### Result Operations
 
 ```ruby
