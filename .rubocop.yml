@@ -1,0 +1,67 @@
+plugins:
+  - rubocop-rspec
+  - rubocop-rake
+
+AllCops:
+  TargetRubyVersion: 3.2
+  NewCops: enable
+
+Style/StringLiterals:
+  EnforcedStyle: double_quotes
+
+Style/StringLiteralsInInterpolation:
+  EnforcedStyle: double_quotes
+
+# Allow RBS Inline annotations (#:)
+Layout/LeadingCommentSpace:
+  AllowRBSInlineAnnotation: true
+
+# Allow multiple expectations in a single example for readability
+RSpec/MultipleExpectations:
+  Max: 5
+
+# Allow longer examples for comprehensive testing
+RSpec/ExampleLength:
+  Max: 35
+
+# Allow more memoized helpers for complex test setup
+RSpec/MultipleMemoizedHelpers:
+  Max: 10
+
+# Allow instance variables in test helper objects
+RSpec/InstanceVariable:
+  Enabled: false
+
+# Container and Base classes need more lines for comprehensive functionality
+Metrics/ClassLength:
+  Exclude:
+    - "lib/senro_usecaser/container.rb"
+    - "lib/senro_usecaser/base.rb"
+
+# Allow longer methods in complex classes
+Metrics/MethodLength:
+  Exclude:
+    - "lib/senro_usecaser/base.rb"
+    - "lib/senro_usecaser/configuration.rb"
+
+# Allow complex conditions in step classes
+Metrics/CyclomaticComplexity:
+  Exclude:
+    - "lib/senro_usecaser/base.rb"
+
+Metrics/PerceivedComplexity:
+  Exclude:
+    - "lib/senro_usecaser/base.rb"
+
+# AroundBlock is a false positive for our DSL
+RSpec/AroundBlock:
+  Enabled: false
+
+# Allow multiple describe blocks for related test classes
+RSpec/MultipleDescribes:
+  Enabled: false
+
+# Allow describe blocks without explicit class reference for behavior tests
+RSpec/DescribeClass:
+  Exclude:
+    - "spec/**/*_spec.rb"

@@ -1,0 +1,113 @@
+# Generated from lib/senro_usecaser.rb with RBS::Inline
+
+# SenroUsecaser is a type-safe UseCase pattern implementation library for Ruby.
+#
+# It provides:
+# - Type-safe input/output with RBS Inline
+# - DI container with namespaces
+# - Flexible composition with organize/include/extend patterns
+#
+# @example Basic UseCase
+#   class CreateUserUseCase < SenroUsecaser::Base
+#     def call(name:, email:)
+#       user = User.create(name: name, email: email)
+#       success(user)
+#     end
+#   end
+#
+#   result = CreateUserUseCase.call(name: "Taro", email: "taro@example.com")
+#   if result.success?
+#     puts result.value.name
+#   end
+module SenroUsecaser
+  # Returns the global container instance
+  #
+  # @example
+  #   SenroUsecaser.container.register(:logger, Logger.new)
+  #
+  # : () -> Container
+  def self.container: () -> Container
+
+  # Sets the global container instance
+  #
+  # @example
+  #   SenroUsecaser.container = MyCustomContainer.new
+  #
+  # : (Container) -> Container
+  attr_writer container: untyped
+
+  # Resets the global container (useful for testing)
+  #
+  # : () -> void
+  def self.reset_container!: () -> void
+
+  # Registers a provider to the global container
+  #
+  # @example
+  #   SenroUsecaser.register_provider(UserProvider)
+  #
+  # : (singleton(Provider)) -> void
+  def self.register_provider: (singleton(Provider)) -> void
+
+  # Registers multiple providers to the global container
+  #
+  # @example
+  #   SenroUsecaser.register_providers(UserProvider, OrderProvider, PaymentProvider)
+  #
+  # : (*singleton(Provider)) -> void
+  def self.register_providers: (*singleton(Provider)) -> void
+
+  # Returns the configuration instance
+  #
+  # : () -> Configuration
+  def self.configuration: () -> Configuration
+
+  # Configures SenroUsecaser
+  #
+  # @example
+  #   SenroUsecaser.configure do |config|
+  #     config.providers = [CoreProvider, UserProvider]
+  #     config.infer_namespace_from_module = true
+  #   end
+  #
+  # : () { (Configuration) -> void } -> void
+  def self.configure: () { (Configuration) -> void } -> void
+
+  # Boots all configured providers in dependency order
+  #
+  # @example
+  #   SenroUsecaser.configure do |config|
+  #     config.providers = [CoreProvider, UserProvider]
+  #   end
+  #   SenroUsecaser.boot!
+  #
+  # : () -> void
+  def self.boot!: () -> void
+
+  # Shuts down all booted providers
+  #
+  # : () -> void
+  def self.shutdown!: () -> void
+
+  # Returns the current environment
+  #
+  # @example
+  #   SenroUsecaser.env.development?
+  #   SenroUsecaser.env.production?
+  #
+  # : () -> Environment
+  def self.env: () -> Environment
+
+  # Sets the environment
+  #
+  # : (String) -> void
+  def self.env=: (String) -> void
+
+  # Resets all state (useful for testing)
+  #
+  # : () -> void
+  def self.reset!: () -> void
+
+  # : () -> String
+  private def self.detect_environment: () -> String
+end

@@ -1,0 +1,190 @@
+# Generated from lib/senro_usecaser/container.rb with RBS::Inline
+
+module SenroUsecaser
+  # Wrapper for singleton registrations that caches the result
+  class SingletonRegistration
+    # : (^(Container) -> untyped) -> void
+    def initialize: (^(Container) -> untyped) -> void
+
+    # : (Container) -> untyped
+    def call: (Container) -> untyped
+  end
+
+  # DI Container with namespace support
+  #
+  # @example Basic usage
+  #   container = SenroUsecaser::Container.new
+  #   container.register(:logger, Logger.new)
+  #   container.resolve(:logger) # => Logger instance
+  #
+  # @example With namespaces
+  #   container = SenroUsecaser::Container.new
+  #   container.register(:logger, Logger.new)
+  #
+  #   container.namespace(:admin) do
+  #     register(:user_repository, AdminUserRepository.new)
+  #   end
+  #
+  #   # From admin namespace, can resolve both admin and root dependencies
+  #   container.resolve_in(:admin, :user_repository) # => AdminUserRepository
+  #   container.resolve_in(:admin, :logger)          # => Logger (from root)
+  class Container
+    # Error raised when a dependency cannot be resolved
+    class ResolutionError < StandardError
+    end
+
+    # Error raised when a dependency is already registered
+    class DuplicateRegistrationError < StandardError
+    end
+
+    # : (?parent: Container?) -> void
+    def initialize: (?parent: Container?) -> void
+
+    # Creates a scoped child container that inherits from this container
+    #
+    # @example
+    #   scoped = container.scope do
+    #     register(:current_user, current_user)
+    #   end
+    #   scoped.resolve(:current_user) # => current_user
+    #   scoped.resolve(:logger)       # => resolved from parent
+    #
+    # : () ?{ [self: Container] () -> void } -> Container
+    def scope: () ?{ (?) -> untyped } -> untyped
+
+    # Registers a dependency in the current namespace
+    #
+    # @example With value (returns same value every time)
+    #   container.register(:logger, Logger.new)
+    #
+    # @example With block (lazy evaluation, called every time, receives container)
+    #   container.register(:database) { |container| Database.connect }
+    #
+    # : (Symbol, ?untyped) ?{ (Container) -> untyped } -> void
+    def register: (Symbol, ?untyped) ?{ (Container) -> untyped } -> void
+
+    # Registers a lazy dependency (block is called every time on resolve)
+    #
+    # @example
+    #   container.register_lazy(:connection) { |c| Database.connect }
+    #
+    # @example With dependency resolution
+    #   container.register_lazy(:user_repository) do |container|
+    #     UserRepository.new(current_user: container.resolve(:current_user))
+    #   end
+    #
+    # : [T] (Symbol) { (Container) -> T } -> void
+    def register_lazy: [T] (Symbol) { (Container) -> T } -> void
+
+    # Registers a singleton dependency (block is called once and cached)
+    #
+    # @example
+    #   container.register_singleton(:database) { |c| Database.connect }
+    #   container.resolve(:database) # => same instance every time
+    #
+    # @example With dependency resolution
+    #   container.register_singleton(:service) do |container|
+    #     Service.new(logger: container.resolve(:logger))
+    #   end
+    #
+    # : [T] (Symbol) { (Container) -> T } -> void
+    def register_singleton: [T] (Symbol) { (Container) -> T } -> void
+
+    # Resolves a dependency from the current namespace or its ancestors
+    #
+    # @example
+    #   container.resolve(:logger)
+    #
+    # : [T] (Symbol) -> T
+    def resolve: [T] (Symbol) -> T
+
+    # Resolves a dependency from a specific namespace or its ancestors
+    #
+    # @example
+    #   container.resolve_in(:admin, :logger)
+    #   container.resolve_in("admin::reports", :generator)
+    #
+    # : [T] ((Symbol | String | Array[Symbol]), Symbol) -> T
+    def resolve_in: [T] (Symbol | String | Array[Symbol], Symbol) -> T
+
+    # Checks if a dependency is registered
+    #
+    # : (Symbol) -> bool
+    def registered?: (Symbol) -> bool
+
+    # Checks if a dependency is registered in a specific namespace or its ancestors
+    #
+    # : ((Symbol | String | Array[Symbol]), Symbol) -> bool
+    def registered_in?: (Symbol | String | Array[Symbol], Symbol) -> bool
+
+    # Creates a namespace scope for registering dependencies
+    #
+    # @example
+    #   container.namespace(:admin) do
+    #     register(:user_repository, AdminUserRepository.new)
+    #
+    #     namespace(:reports) do
+    #       register(:generator, ReportGenerator.new)
+    #     end
+    #   end
+    #
+    # : ((Symbol | String)) { () -> void } -> void
+    def namespace: (Symbol | String) { () -> void } -> void
+
+    # Returns all registered keys (including parent keys)
+    #
+    # : () -> Array[String]
+    def keys: () -> Array[String]
+
+    # Returns only keys registered in this container (excluding parent)
+    #
+    # : () -> Array[String]
+    def own_keys: () -> Array[String]
+
+    # Returns the parent container if any
+    #
+    # : () -> Container?
+    attr_reader parent: untyped
+
+    # Clears all registrations
+    #
+    # : () -> void
+    def clear!: () -> void
+
+    private
+
+    # : () -> String
+    def current_namespace_path: () -> String
+
+    # : (Symbol) -> String
+    def build_key: (Symbol) -> String
+
+    # : (Array[Symbol], Symbol) -> String
+    def build_key_with_namespace: (Array[Symbol], Symbol) -> String
+
+    # : ((Symbol | String | Array[Symbol])) -> Array[Symbol]
+    def normalize_namespace: (Symbol | String | Array[Symbol]) -> Array[Symbol]
+
+    # : (Array[Symbol]) -> Array[Symbol]
+    def normalize_array_namespace: (Array[Symbol]) -> Array[Symbol]
+
+    # : (Symbol) -> Array[Symbol]
+    def normalize_symbol_namespace: (Symbol) -> Array[Symbol]
+
+    # : (String) -> Array[Symbol]
+    def normalize_string_namespace: (String) -> Array[Symbol]
+
+    # : (String) -> void
+    def check_duplicate_registration!: (String) -> void
+
+    # Invokes a registration, passing the container for dependency resolution
+    #
+    # : (untyped) -> untyped
+    def invoke_registration: (untyped) -> untyped
+
+    # Finds a registration in this container or its parent chain
+    #
+    # : ((Symbol | String | Array[Symbol]), Symbol) -> untyped
+    def find_registration: (Symbol | String | Array[Symbol], Symbol) -> untyped
+  end
+end

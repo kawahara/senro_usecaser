@@ -1,0 +1,58 @@
+# Generated from lib/senro_usecaser/error.rb with RBS::Inline
+
+module SenroUsecaser
+  # Represents an error in a Result
+  #
+  # @example Basic error
+  #   error = SenroUsecaser::Error.new(
+  #     code: :invalid_email,
+  #     message: "Email format is invalid",
+  #     field: :email
+  #   )
+  #
+  # @example Error from exception
+  #   begin
+  #     # some code that raises
+  #   rescue => e
+  #     error = SenroUsecaser::Error.new(
+  #       code: :unexpected_error,
+  #       message: e.message,
+  #       cause: e
+  #     )
+  #   end
+  class Error
+    # : Symbol
+    attr_reader code: untyped
+
+    # : String
+    attr_reader message: untyped
+
+    # : Symbol?
+    attr_reader field: untyped
+
+    # : Exception?
+    attr_reader cause: untyped
+
+    # : (code: Symbol, message: String, ?field: Symbol?, ?cause: Exception?) -> void
+    def initialize: (code: Symbol, message: String, ?field: Symbol?, ?cause: Exception?) -> void
+
+    # Creates an Error from an exception
+    #
+    # : (Exception, ?code: Symbol) -> Error
+    def self.from_exception: (Exception, ?code: Symbol) -> Error
+
+    # Returns true if this error was caused by an exception
+    #
+    # : () -> bool
+    def caused_by_exception?: () -> bool
+
+    # : (Error) -> bool
+    def ==: (Error) -> bool
+
+    # : () -> String
+    def to_s: () -> String
+
+    # : () -> String
+    def inspect: () -> String
+  end
+end

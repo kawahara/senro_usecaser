@@ -1,0 +1,153 @@
+# Generated from lib/senro_usecaser/provider.rb with RBS::Inline
+
+module SenroUsecaser
+  # Base class for dependency providers
+  #
+  # Providers allow organizing dependency registrations across multiple files.
+  # Each provider is responsible for registering a group of related dependencies.
+  #
+  # @example Basic provider
+  #   class UserProvider < SenroUsecaser::Provider
+  #     def register(container)
+  #       container.register(:user_repository, UserRepository.new)
+  #       container.register_singleton(:user_service) do |c|
+  #         UserService.new(repo: c.resolve(:user_repository))
+  #       end
+  #     end
+  #   end
+  #
+  # @example Provider with namespace
+  #   class AdminProvider < SenroUsecaser::Provider
+  #     namespace :admin
+  #
+  #     def register(container)
+  #       container.register(:user_repository, AdminUserRepository.new)
+  #     end
+  #   end
+  #
+  # @example Provider with dependencies
+  #   class PersistenceProvider < SenroUsecaser::Provider
+  #     depends_on CoreProvider
+  #
+  #     def register(container)
+  #       container.register(:database, Database.connect)
+  #     end
+  #   end
+  #
+  # @example Conditional provider
+  #   class DevelopmentProvider < SenroUsecaser::Provider
+  #     enabled_if { SenroUsecaser.env.development? }
+  #   end
+  class Provider
+    # Declares dependencies on other providers
+    #
+    # @example
+    #   class PersistenceProvider < SenroUsecaser::Provider
+    #     depends_on CoreProvider
+    #     depends_on ConfigProvider
+    #   end
+    #
+    # : (*singleton(Provider)) -> void
+    def self.depends_on: (*singleton(Provider)) -> void
+
+    # Returns the list of provider dependencies
+    #
+    # : () -> Array[singleton(Provider)]
+    def self.provider_dependencies: () -> Array[singleton(Provider)]
+
+    # Sets a condition for enabling this provider
+    #
+    # @example
+    #   class DevelopmentProvider < SenroUsecaser::Provider
+    #     enabled_if { Rails.env.development? }
+    #   end
+    #
+    # : () { () -> bool } -> void
+    def self.enabled_if: () { () -> bool } -> void
+
+    # Returns whether this provider is enabled
+    #
+    # : () -> bool
+    def self.enabled?: () -> bool
+
+    # Sets the namespace for this provider's registrations
+    #
+    # @example
+    #   class AdminProvider < SenroUsecaser::Provider
+    #     namespace :admin
+    #   end
+    #
+    # : ((Symbol | String)) -> void
+    def self.namespace: (Symbol | String) -> void
+
+    # @rbs!
+    #   def self.provider_namespace: () -> (Symbol | String)?
+    attr_reader provider_namespace: untyped
+
+    # Registers this provider's dependencies to the given container
+    #
+    # : (Container) -> void
+    def self.call: (Container) -> void
+
+    # Registers dependencies to the container, wrapped in namespace if declared
+    #
+    # : (Container) -> void
+    def register_to: (Container) -> void
+
+    # Returns the effective namespace for this provider
+    # Uses explicitly declared namespace, or infers from module structure if configured
+    #
+    # : () -> (Symbol | String)?
+    def effective_namespace: () -> (Symbol | String)?
+
+    # Infers namespace from the class's module structure
+    #
+    # @example
+    #   Admin::UserProvider => "admin"
+    #   Admin::Reports::ReportProvider => "admin::reports"
+    #   CoreProvider => nil
+    #
+    # : () -> String?
+    def infer_namespace_from_class: () -> String?
+
+    # Called before register. Override in subclasses.
+    #
+    # @example
+    #   def before_register(container)
+    #     # Setup work
+    #   end
+    #
+    # : (Container) -> void
+    def before_register: (Container) -> void
+
+    # Override this method to register dependencies
+    #
+    # @example
+    #   def register(container)
+    #     container.register(:logger, Logger.new)
+    #   end
+    #
+    # : (Container) -> void
+    def register: (Container) -> void
+
+    # Called after all providers are registered. Override in subclasses.
+    #
+    # @example
+    #   def after_boot(container)
+    #     container.resolve(:database).verify_connection!
+    #   end
+    #
+    # : (Container) -> void
+    def after_boot: (Container) -> void
+
+    # Called on application shutdown. Override in subclasses.
+    #
+    # @example
+    #   def shutdown(container)
+    #     container.resolve(:database).disconnect
+    #   end
+    #
+    # : (Container) -> void
+    def shutdown: (Container) -> void
+  end
+end

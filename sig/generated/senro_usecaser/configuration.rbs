@@ -1,0 +1,80 @@
+# Generated from lib/senro_usecaser/configuration.rb with RBS::Inline
+
+module SenroUsecaser
+  # Configuration for SenroUsecaser
+  #
+  # @example
+  #   SenroUsecaser.configure do |config|
+  #     config.providers = [CoreProvider, UserProvider]
+  #     config.infer_namespace_from_module = true
+  #   end
+  class Configuration
+    # List of provider classes to boot
+    # : () -> Array[singleton(Provider)]
+    attr_accessor providers: untyped
+
+    # Whether to infer namespace from module structure
+    # : () -> bool
+    attr_accessor infer_namespace_from_module: untyped
+
+    # : () -> void
+    def initialize: () -> void
+  end
+
+  # Environment detection
+  #
+  # @example
+  #   SenroUsecaser.env.development?
+  #   SenroUsecaser.env.production?
+  class Environment
+    # : (String) -> void
+    def initialize: (String) -> void
+
+    # : () -> String
+    attr_reader name: untyped
+
+    # : () -> bool
+    def development?: () -> bool
+
+    # : () -> bool
+    def test?: () -> bool
+
+    # : () -> bool
+    def production?: () -> bool
+
+    # : () -> String
+    def to_s: () -> String
+  end
+
+  # Provider boot manager
+  #
+  # Resolves provider dependencies and boots them in correct order.
+  class ProviderBooter
+    # Error raised when circular dependencies are detected
+    class CircularDependencyError < StandardError
+    end
+
+    # : (Array[singleton(Provider)], Container) -> void
+    def initialize: (Array[singleton(Provider)], Container) -> void
+
+    # Boots all providers in dependency order
+    #
+    # : () -> void
+    def boot!: () -> void
+
+    # Shuts down all providers in reverse order
+    #
+    # : () -> void
+    def shutdown!: () -> void
+
+    private
+
+    # Topologically sorts providers based on dependencies
+    #
+    # : (Array[singleton(Provider)]) -> Array[singleton(Provider)]
+    def topological_sort: (Array[singleton(Provider)]) -> Array[singleton(Provider)]
+
+    # : (singleton(Provider), Array[singleton(Provider)], Hash[singleton(Provider), bool], Hash[singleton(Provider), bool]) -> void
+    def visit: (singleton(Provider), Array[singleton(Provider)], Hash[singleton(Provider), bool], Hash[singleton(Provider), bool]) -> void
+  end
+end

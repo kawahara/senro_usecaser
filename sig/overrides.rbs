@@ -1,0 +1,16 @@
+# Supplementary type definitions for rbs-inline generated types
+# Only add missing declarations that rbs-inline doesn't generate
+
+module SenroUsecaser
+  class Provider
+    # Class method for provider_namespace (attr_reader in class << self)
+    def self.provider_namespace: () -> (Symbol | String)?
+  end
+
+  class Base
+    # Class methods that rbs-inline doesn't generate correctly
+    def self.organized_steps: () -> Array[Step]?
+    def self.use_case_namespace: () -> (Symbol | String)?
+    def self.input_class: () -> Class?
+  end
+end

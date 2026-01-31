@@ -1,0 +1,279 @@
+# Generated from examples/namespace_demo.rb with RBS::Inline
+
+# サンプル全体を NamespaceDemo モジュールで囲み、
+# 他のサンプル（order_system.rb）とのクラス名衝突を回避
+module NamespaceDemo
+  class User
+    # : Integer
+    attr_reader id: untyped
+
+    # : String
+    attr_reader name: untyped
+
+    # : String
+    attr_reader role: untyped
+
+    # : (id: Integer, name: String, role: String) -> void
+    def initialize: (id: Integer, name: String, role: String) -> void
+  end
+
+  class AuditLog
+    # : String
+    attr_reader action: untyped
+
+    # : User
+    attr_reader performed_by: untyped
+
+    # : Time
+    attr_reader timestamp: untyped
+
+    # : (action: String, performed_by: User, timestamp: Time) -> void
+    def initialize: (action: String, performed_by: User, timestamp: Time) -> void
+  end
+
+  # 全 namespace で共有されるロガー
+  class Logger
+    # : String
+    attr_reader prefix: untyped
+
+    # : (?String) -> void
+    def initialize: (?String) -> void
+
+    # : (String) -> void
+    def info: (String) -> void
+  end
+
+  module Public
+    class UserRepository
+      # : () -> void
+      def initialize: () -> void
+
+      # : (Integer) -> User?
+      def find: (Integer) -> User?
+
+      # : () -> Array[User]
+      def all: () -> Array[User]
+    end
+
+    class NotificationService
+      # : (User, String) -> bool
+      def notify: (User, String) -> bool
+    end
+  end
+
+  module Admin
+    class UserRepository
+      # : () -> void
+      def initialize: () -> void
+
+      # : (Integer) -> User?
+      def find: (Integer) -> User?
+
+      # : () -> Array[User]
+      def all: () -> Array[User]
+
+      # Admin 専用: ユーザーの全情報を取得
+      # : (Integer) -> Hash[Symbol, untyped]?
+      def find_with_permissions: (Integer) -> Hash[Symbol, untyped]?
+    end
+
+    class NotificationService
+      # : (User, String) -> bool
+      def notify: (User, String) -> bool
+    end
+
+    class AuditLogger
+      # : () -> void
+      def initialize: () -> void
+
+      # : (action: String, performed_by: User) -> AuditLog
+      def log: (action: String, performed_by: User) -> AuditLog
+
+      # : () -> Array[AuditLog]
+      def recent_logs: () -> Array[AuditLog]
+    end
+  end
+
+  module Admin
+    module Reports
+      class ReportGenerator
+        # : (String, Hash[Symbol, untyped]) -> String
+        def generate: (String, Hash[Symbol, untyped]) -> String
+      end
+
+      class ReportExporter
+        # : (String, Symbol) -> String
+        def export: (String, Symbol) -> String
+      end
+    end
+  end
+
+  # 共有サービス（ルート namespace）
+  class CoreProvider < SenroUsecaser::Provider
+    # : (SenroUsecaser::Container) -> void
+    def register: (SenroUsecaser::Container) -> void
+  end
+
+  # Public namespace のサービス（namespace DSL 使用）
+  class PublicProvider < SenroUsecaser::Provider
+    # : (SenroUsecaser::Container) -> void
+    def register: (SenroUsecaser::Container) -> void
+  end
+
+  # Admin namespace のサービス（Container.namespace 直接使用）
+  class AdminProvider < SenroUsecaser::Provider
+    # : (SenroUsecaser::Container) -> void
+    def register: (SenroUsecaser::Container) -> void
+
+    # : (SenroUsecaser::Container) -> void
+    def after_boot: (SenroUsecaser::Container) -> void
+  end
+
+  # Admin::Reports namespace のサービス（Container.namespace ネスト使用）
+  class AdminReportsProvider < SenroUsecaser::Provider
+    # : (SenroUsecaser::Container) -> void
+    def register: (SenroUsecaser::Container) -> void
+  end
+
+  # Public namespace の UseCase
+  class ListPublicUsersUseCase < SenroUsecaser::Base
+    class Output
+      # : (users: Array[User]) -> void
+      def initialize: (users: Array[User]) -> void
+
+      # : () -> Array[User]
+      attr_reader users: untyped
+    end
+
+    def user_repository: () -> Public::UserRepository
+
+    def logger: () -> Logger
+
+    # : (?untyped, **untyped) -> SenroUsecaser::Result[Output]
+    def call: (?untyped, **untyped) -> SenroUsecaser::Result[Output]
+  end
+
+  # Admin namespace の UseCase
+  class ListAdminUsersUseCase < SenroUsecaser::Base
+    class Output
+      # : (users: Array[User]) -> void
+      def initialize: (users: Array[User]) -> void
+
+      # : () -> Array[User]
+      attr_reader users: untyped
+    end
+
+    def user_repository: () -> Admin::UserRepository
+
+    def audit_logger: () -> Admin::AuditLogger
+
+    def logger: () -> Logger
+
+    # : (?untyped, **untyped) -> SenroUsecaser::Result[Output]
+    def call: (?untyped, **untyped) -> SenroUsecaser::Result[Output]
+  end
+
+  # Admin::Reports namespace の UseCase（ネストした namespace）
+  class GenerateUserReportUseCase < SenroUsecaser::Base
+    class Input
+      # : (report_type: String) -> void
+      def initialize: (report_type: String) -> void
+
+      # : () -> String
+      attr_reader report_type: untyped
+    end
+
+    class Output
+      # : (report: String) -> void
+      def initialize: (report: String) -> void
+
+      # : () -> String
+      attr_reader report: untyped
+    end
+
+    def report_generator: () -> Admin::Reports::ReportGenerator
+
+    def report_exporter: () -> Admin::Reports::ReportExporter
+
+    def user_repository: () -> Admin::UserRepository
+
+    def audit_logger: () -> Admin::AuditLogger
+
+    def logger: () -> Logger
+
+    # : (Input) -> SenroUsecaser::Result[Output]
+    def call: (Input) -> SenroUsecaser::Result[Output]
+  end
+
+  # リクエストスコープで current_user を注入しつつ、namespace を活用
+  class AdminActionUseCase < SenroUsecaser::Base
+    class Output
+      # : (message: String) -> void
+      def initialize: (message: String) -> void
+
+      # : () -> String
+      attr_reader message: untyped
+    end
+
+    def current_user: () -> User
+
+    def audit_logger: () -> Admin::AuditLogger
+
+    def notification_service: () -> Admin::NotificationService
+
+    # : (?untyped, **untyped) -> SenroUsecaser::Result[Output]
+    def call: (?untyped, **untyped) -> SenroUsecaser::Result[Output]
+  end
+end
+
+# Public::InferredUseCase → namespace "public" として推論
+module Public
+  class InferredUseCase < SenroUsecaser::Base
+    class Output
+      # : (message: String) -> void
+      def initialize: (message: String) -> void
+
+      # : () -> String
+      attr_reader message: untyped
+    end
+
+    def user_repository: () -> NamespaceDemo::Public::UserRepository
+
+    def logger: () -> NamespaceDemo::Logger
+
+    # : (?untyped, **untyped) -> SenroUsecaser::Result[Output]
+    def call: (?untyped, **untyped) -> SenroUsecaser::Result[Output]
+  end
+end
+
+# Admin::Reports::InferredReportUseCase → namespace "admin::reports" として推論
+module Admin
+  module Reports
+    class InferredReportUseCase < SenroUsecaser::Base
+      class Output
+        # : (message: String) -> void
+        def initialize: (message: String) -> void
+
+        # : () -> String
+        attr_reader message: untyped
+      end
+
+      def report_generator: () -> NamespaceDemo::Admin::Reports::ReportGenerator
+
+      def user_repository: () -> NamespaceDemo::Admin::UserRepository
+
+      def logger: () -> NamespaceDemo::Logger
+
+      # : (?untyped, **untyped) -> SenroUsecaser::Result[Output]
+      def call: (?untyped, **untyped) -> SenroUsecaser::Result[Output]
+    end
+  end
+end
+
+# Inferred::ServiceProvider → namespace "inferred" として推論
+module Inferred
+  class ServiceProvider < SenroUsecaser::Provider
+    # : (SenroUsecaser::Container) -> void
+    def register: (SenroUsecaser::Container) -> void
+  end
+end

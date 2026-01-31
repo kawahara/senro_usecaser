@@ -1,0 +1,689 @@
+# Generated from order_system.rb with RBS::Inline
+
+# ユーザーモデル
+class User
+  # : Integer
+  attr_reader id: untyped
+
+  # : String
+  attr_reader name: untyped
+
+  # : String
+  attr_reader email: untyped
+
+  # : bool
+  attr_reader premium: untyped
+
+  # : (id: Integer, name: String, email: String, premium: bool) -> void
+  def initialize: (id: Integer, name: String, email: String, premium: bool) -> void
+
+  # : () -> bool
+  def premium?: () -> bool
+end
+
+# 商品モデル
+class Product
+  # : Integer
+  attr_reader id: untyped
+
+  # : String
+  attr_reader name: untyped
+
+  # : Integer
+  attr_reader price: untyped
+
+  # : Integer
+  attr_reader stock: untyped
+
+  # : (id: Integer, name: String, price: Integer, stock: Integer) -> void
+  def initialize: (id: Integer, name: String, price: Integer, stock: Integer) -> void
+end
+
+# 注文モデル
+class Order
+  # : Integer
+  attr_reader id: untyped
+
+  # : Integer
+  attr_reader user_id: untyped
+
+  # : Array[Integer]
+  attr_reader items: untyped
+
+  # : Integer
+  attr_reader subtotal: untyped
+
+  # : Integer
+  attr_reader tax: untyped
+
+  # : Integer
+  attr_reader discount: untyped
+
+  # : Integer
+  attr_reader total: untyped
+
+  # : String
+  attr_reader status: untyped
+
+  # : (id: Integer, user_id: Integer, items: Array[Integer], subtotal: Integer, tax: Integer, discount: Integer, total: Integer, status: String) -> void
+  def initialize: (id: Integer, user_id: Integer, items: Array[Integer], subtotal: Integer, tax: Integer, discount: Integer, total: Integer, status: String) -> void
+end
+
+class CreateOrderOutput
+  # : (order: Order) -> void
+  def initialize: (order: Order) -> void
+
+  # : () -> Order
+  def order: () -> Order
+end
+
+class GreetingOutput
+  # : (greeted: String) -> void
+  def initialize: (greeted: String) -> void
+
+  # : () -> String
+  def greeted: () -> String
+end
+
+class AccumulatedOutput
+  # : (counter: Integer, final: bool) -> void
+  def initialize: (counter: Integer, final: bool) -> void
+
+  # : () -> Integer
+  def counter: () -> Integer
+
+  # : () -> bool
+  def final: () -> bool
+end
+
+class UserRepository
+  # : () -> void
+  def initialize: () -> void
+
+  # : (Integer) -> User?
+  def find: (Integer) -> User?
+end
+
+class ProductRepository
+  # : () -> void
+  def initialize: () -> void
+
+  # : (Integer) -> Product?
+  def find: (Integer) -> Product?
+
+  # : (Array[Integer]) -> Array[Product]
+  def find_all: (Array[Integer]) -> Array[Product]
+end
+
+class OrderRepository
+  # : () -> void
+  def initialize: () -> void
+
+  # : (user_id: Integer, items: Array[Integer], subtotal: Integer, tax: Integer, discount: Integer, total: Integer) -> Order
+  def create: (user_id: Integer, items: Array[Integer], subtotal: Integer, tax: Integer, discount: Integer, total: Integer) -> Order
+end
+
+# 決済結果
+class PaymentResult
+  # : String
+  attr_reader transaction_id: untyped
+
+  # : Time
+  attr_reader charged_at: untyped
+
+  # : (transaction_id: String, charged_at: Time) -> void
+  def initialize: (transaction_id: String, charged_at: Time) -> void
+end
+
+class PaymentService
+  # : (user: User, amount: Integer) -> PaymentResult
+  def charge: (user: User, amount: Integer) -> PaymentResult
+end
+
+class NotificationService
+  # : (to: String, subject: String, body: String) -> bool
+  def send_email: (to: String, subject: String, body: String) -> bool
+end
+
+class DiscountService
+  # : (Integer) -> Integer
+  def calculate_premium_discount: (Integer) -> Integer
+end
+
+class Logger
+  # : (String) -> void
+  def info: (String) -> void
+end
+
+# コアプロバイダー: 基本サービスを登録
+class CoreProvider < SenroUsecaser::Provider
+  # : (SenroUsecaser::Container) -> void
+  def register: (SenroUsecaser::Container) -> void
+end
+
+# インフラプロバイダー: リポジトリを登録
+class InfrastructureProvider < SenroUsecaser::Provider
+  # : (SenroUsecaser::Container) -> void
+  def register: (SenroUsecaser::Container) -> void
+
+  # : (SenroUsecaser::Container) -> void
+  def after_boot: (SenroUsecaser::Container) -> void
+end
+
+# サービスプロバイダー: ビジネスサービスを登録
+class ServiceProvider < SenroUsecaser::Provider
+  # : (SenroUsecaser::Container) -> void
+  def register: (SenroUsecaser::Container) -> void
+end
+
+# 開発環境用プロバイダー: 開発環境でのみ有効
+class DevelopmentProvider < SenroUsecaser::Provider
+  # : (SenroUsecaser::Container) -> void
+  def register: (SenroUsecaser::Container) -> void
+end
+
+# ユーザー検証
+class ValidateUserUseCase < SenroUsecaser::Base
+  class Input
+    # : (user_id: Integer, product_ids: Array[Integer], **untyped) -> void
+    def initialize: (user_id: Integer, product_ids: Array[Integer], **untyped) -> void
+
+    # : () -> Integer
+    def user_id: () -> Integer
+
+    # : () -> Array[Integer]
+    def product_ids: () -> Array[Integer]
+  end
+
+  class Output
+    # : (user: User, product_ids: Array[Integer], **untyped) -> void
+    def initialize: (user: User, product_ids: Array[Integer], **untyped) -> void
+
+    # : () -> User
+    def user: () -> User
+
+    # : () -> Array[Integer]
+    def product_ids: () -> Array[Integer]
+  end
+
+  def user_repository: () -> UserRepository
+
+  # : (Input) -> SenroUsecaser::Result[Output]
+  def call: (Input) -> SenroUsecaser::Result[Output]
+end
+
+# 商品検証と在庫チェック
+class ValidateProductsUseCase < SenroUsecaser::Base
+  class Input
+    # : (user: User, product_ids: Array[Integer], **untyped) -> void
+    def initialize: (user: User, product_ids: Array[Integer], **untyped) -> void
+
+    # : () -> User
+    def user: () -> User
+
+    # : () -> Array[Integer]
+    def product_ids: () -> Array[Integer]
+  end
+
+  class Output
+    # : (user: User, items: Array[Product], subtotal: Integer, **untyped) -> void
+    def initialize: (user: User, items: Array[Product], subtotal: Integer, **untyped) -> void
+
+    # : () -> User
+    def user: () -> User
+
+    # : () -> Array[Product]
+    def items: () -> Array[Product]
+
+    # : () -> Integer
+    def subtotal: () -> Integer
+  end
+
+  def product_repository: () -> ProductRepository
+
+  # : (Input) -> SenroUsecaser::Result[Output]
+  def call: (Input) -> SenroUsecaser::Result[Output]
+end
+
+# 税金計算
+class CalculateTaxUseCase < SenroUsecaser::Base
+  class Input
+    # : (user: User, items: Array[Product], subtotal: Integer, **untyped) -> void
+    def initialize: (user: User, items: Array[Product], subtotal: Integer, **untyped) -> void
+
+    # : () -> User
+    def user: () -> User
+
+    # : () -> Array[Product]
+    def items: () -> Array[Product]
+
+    # : () -> Integer
+    def subtotal: () -> Integer
+  end
+
+  class Output
+    # : (user: User, items: Array[Product], subtotal: Integer, tax: Integer, **untyped) -> void
+    def initialize: (user: User, items: Array[Product], subtotal: Integer, tax: Integer, **untyped) -> void
+
+    # : () -> User
+    def user: () -> User
+
+    # : () -> Array[Product]
+    def items: () -> Array[Product]
+
+    # : () -> Integer
+    def subtotal: () -> Integer
+
+    # : () -> Integer
+    def tax: () -> Integer
+  end
+
+  # : (Input) -> SenroUsecaser::Result[Output]
+  def call: (Input) -> SenroUsecaser::Result[Output]
+end
+
+# プレミアム会員割引
+class ApplyPremiumDiscountUseCase < SenroUsecaser::Base
+  class Input
+    # : (user: User, items: Array[Product], subtotal: Integer, tax: Integer, **untyped) -> void
+    def initialize: (user: User, items: Array[Product], subtotal: Integer, tax: Integer, **untyped) -> void
+
+    # : () -> User
+    def user: () -> User
+
+    # : () -> Array[Product]
+    def items: () -> Array[Product]
+
+    # : () -> Integer
+    def subtotal: () -> Integer
+
+    # : () -> Integer
+    def tax: () -> Integer
+  end
+
+  class Output
+    # : (user: User, items: Array[Product], subtotal: Integer, tax: Integer, discount: Integer, **untyped) -> void
+    def initialize: (user: User, items: Array[Product], subtotal: Integer, tax: Integer, discount: Integer, **untyped) -> void
+
+    # : () -> User
+    def user: () -> User
+
+    # : () -> Array[Product]
+    def items: () -> Array[Product]
+
+    # : () -> Integer
+    def subtotal: () -> Integer
+
+    # : () -> Integer
+    def tax: () -> Integer
+
+    # : () -> Integer
+    def discount: () -> Integer
+  end
+
+  def discount_service: () -> DiscountService
+
+  # : (Input) -> SenroUsecaser::Result[Output]
+  def call: (Input) -> SenroUsecaser::Result[Output]
+end
+
+# 合計計算
+class CalculateTotalUseCase < SenroUsecaser::Base
+  class Input
+    # : (user: User, items: Array[Product], subtotal: Integer, tax: Integer, ?discount: Integer, **untyped) -> void
+    def initialize: (user: User, items: Array[Product], subtotal: Integer, tax: Integer, ?discount: Integer, **untyped) -> void
+
+    # : () -> User
+    def user: () -> User
+
+    # : () -> Array[Product]
+    def items: () -> Array[Product]
+
+    # : () -> Integer
+    def subtotal: () -> Integer
+
+    # : () -> Integer
+    def tax: () -> Integer
+
+    # : () -> Integer
+    def discount: () -> Integer
+  end
+
+  class Output
+    # : (user: User, items: Array[Product], subtotal: Integer, tax: Integer, discount: Integer, total: Integer, **untyped) -> void
+    def initialize: (user: User, items: Array[Product], subtotal: Integer, tax: Integer, discount: Integer, total: Integer, **untyped) -> void
+
+    # : () -> User
+    def user: () -> User
+
+    # : () -> Array[Product]
+    def items: () -> Array[Product]
+
+    # : () -> Integer
+    def subtotal: () -> Integer
+
+    # : () -> Integer
+    def tax: () -> Integer
+
+    # : () -> Integer
+    def discount: () -> Integer
+
+    # : () -> Integer
+    def total: () -> Integer
+  end
+
+  # : (Input) -> SenroUsecaser::Result[Output]
+  def call: (Input) -> SenroUsecaser::Result[Output]
+end
+
+# 決済処理
+class ProcessPaymentUseCase < SenroUsecaser::Base
+  class Input
+    # : (user: User, items: Array[Product], subtotal: Integer, tax: Integer, discount: Integer, total: Integer, **untyped) -> void
+    def initialize: (user: User, items: Array[Product], subtotal: Integer, tax: Integer, discount: Integer, total: Integer, **untyped) -> void
+
+    # : () -> User
+    def user: () -> User
+
+    # : () -> Array[Product]
+    def items: () -> Array[Product]
+
+    # : () -> Integer
+    def subtotal: () -> Integer
+
+    # : () -> Integer
+    def tax: () -> Integer
+
+    # : () -> Integer
+    def discount: () -> Integer
+
+    # : () -> Integer
+    def total: () -> Integer
+  end
+
+  class Output
+    # : (user: User, items: Array[Product], subtotal: Integer, tax: Integer, discount: Integer, total: Integer, payment: PaymentResult, **untyped) -> void
+    def initialize: (user: User, items: Array[Product], subtotal: Integer, tax: Integer, discount: Integer, total: Integer, payment: PaymentResult, **untyped) -> void
+
+    # : () -> User
+    def user: () -> User
+
+    # : () -> Array[Product]
+    def items: () -> Array[Product]
+
+    # : () -> Integer
+    def subtotal: () -> Integer
+
+    # : () -> Integer
+    def tax: () -> Integer
+
+    # : () -> Integer
+    def discount: () -> Integer
+
+    # : () -> Integer
+    def total: () -> Integer
+
+    # : () -> PaymentResult
+    def payment: () -> PaymentResult
+  end
+
+  def payment_service: () -> PaymentService
+
+  # : (Input) -> SenroUsecaser::Result[Output]
+  def call: (Input) -> SenroUsecaser::Result[Output]
+end
+
+# 注文作成
+class CreateOrderRecordUseCase < SenroUsecaser::Base
+  class Input
+    # : (user: User, items: Array[Product], subtotal: Integer, tax: Integer, discount: Integer, total: Integer, **untyped) -> void
+    def initialize: (user: User, items: Array[Product], subtotal: Integer, tax: Integer, discount: Integer, total: Integer, **untyped) -> void
+
+    # : () -> User
+    def user: () -> User
+
+    # : () -> Array[Product]
+    def items: () -> Array[Product]
+
+    # : () -> Integer
+    def subtotal: () -> Integer
+
+    # : () -> Integer
+    def tax: () -> Integer
+
+    # : () -> Integer
+    def discount: () -> Integer
+
+    # : () -> Integer
+    def total: () -> Integer
+  end
+
+  class Output
+    # : (user: User, order: Order, **untyped) -> void
+    def initialize: (user: User, order: Order, **untyped) -> void
+
+    # : () -> User
+    def user: () -> User
+
+    # : () -> Order
+    def order: () -> Order
+  end
+
+  def order_repository: () -> OrderRepository
+
+  # : (Input) -> SenroUsecaser::Result[Output]
+  def call: (Input) -> SenroUsecaser::Result[Output]
+end
+
+# 通知送信
+class SendOrderNotificationUseCase < SenroUsecaser::Base
+  class Input
+    # : (user: User, order: Order, **untyped) -> void
+    def initialize: (user: User, order: Order, **untyped) -> void
+
+    # : () -> User
+    def user: () -> User
+
+    # : () -> Order
+    def order: () -> Order
+  end
+
+  class Output
+    # : (user: User, order: Order, notified: bool, **untyped) -> void
+    def initialize: (user: User, order: Order, notified: bool, **untyped) -> void
+
+    # : () -> User
+    def user: () -> User
+
+    # : () -> Order
+    def order: () -> Order
+
+    # : () -> bool
+    def notified: () -> bool
+  end
+
+  def notification_service: () -> NotificationService
+
+  # : (Input) -> SenroUsecaser::Result[Output]
+  def call: (Input) -> SenroUsecaser::Result[Output]
+end
+
+# パイプライン最終出力をラップ
+class WrapOrderOutputUseCase < SenroUsecaser::Base
+  class Input
+    # : (order: Order, **untyped) -> void
+    def initialize: (order: Order, **untyped) -> void
+
+    # : () -> Order
+    def order: () -> Order
+  end
+
+  # : (Input) -> SenroUsecaser::Result[CreateOrderOutput]
+  def call: (Input) -> SenroUsecaser::Result[CreateOrderOutput]
+end
+
+# ログ記録用 Extension
+module LoggingExtension
+  # : (Hash[Symbol, untyped]) -> void
+  def self.before: (Hash[Symbol, untyped]) -> void
+
+  # : (Hash[Symbol, untyped], SenroUsecaser::Result[untyped]) -> void
+  def self.after: (Hash[Symbol, untyped], SenroUsecaser::Result[untyped]) -> void
+end
+
+# 注文作成パイプライン
+class CreateOrderUseCase < SenroUsecaser::Base
+  class Input
+    # : (user_id: Integer, product_ids: Array[Integer], **untyped) -> void
+    def initialize: (user_id: Integer, product_ids: Array[Integer], **untyped) -> void
+
+    # : () -> Integer
+    def user_id: () -> Integer
+
+    # : () -> Array[Integer]
+    def product_ids: () -> Array[Integer]
+  end
+
+  def self.call: (Input, ?container: SenroUsecaser::Container) -> SenroUsecaser::Result[CreateOrderOutput]
+
+  def call: (Input) -> SenroUsecaser::Result[CreateOrderOutput]
+
+  # : (Hash[Symbol, untyped]) -> bool
+  def premium_user?: (Hash[Symbol, untyped]) -> bool
+end
+
+# リクエストごとに current_user を注入するパターン
+class CurrentUserAwareUseCase < SenroUsecaser::Base
+  def current_user: () -> User
+
+  def logger: () -> Logger
+
+  # : (?untyped, **untyped) -> SenroUsecaser::Result[GreetingOutput]
+  def call: (?untyped, **untyped) -> SenroUsecaser::Result[GreetingOutput]
+end
+
+class Step1 < SenroUsecaser::Base
+  class Input
+    # : (initial: String, **untyped) -> void
+    def initialize: (initial: String, **untyped) -> void
+
+    # : () -> String
+    def initial: () -> String
+  end
+
+  class Output
+    # : (step1_data: String, counter: Integer, **untyped) -> void
+    def initialize: (step1_data: String, counter: Integer, **untyped) -> void
+
+    # : () -> String
+    def step1_data: () -> String
+
+    # : () -> Integer
+    def counter: () -> Integer
+  end
+
+  # : (Input) -> SenroUsecaser::Result[Output]
+  def call: (Input) -> SenroUsecaser::Result[Output]
+end
+
+class Step2 < SenroUsecaser::Base
+  class Input
+    # : (step1_data: String, counter: Integer, **untyped) -> void
+    def initialize: (step1_data: String, counter: Integer, **untyped) -> void
+
+    # : () -> String
+    def step1_data: () -> String
+
+    # : () -> Integer
+    def counter: () -> Integer
+  end
+
+  class Output
+    # : (step1_data: String, step2_data: String, counter: Integer, **untyped) -> void
+    def initialize: (step1_data: String, step2_data: String, counter: Integer, **untyped) -> void
+
+    # : () -> String
+    def step1_data: () -> String
+
+    # : () -> String
+    def step2_data: () -> String
+
+    # : () -> Integer
+    def counter: () -> Integer
+  end
+
+  # : (Input) -> SenroUsecaser::Result[Output]
+  def call: (Input) -> SenroUsecaser::Result[Output]
+end
+
+class Step3 < SenroUsecaser::Base
+  class Input
+    # : (step1_data: String, step2_data: String, counter: Integer, **untyped) -> void
+    def initialize: (step1_data: String, step2_data: String, counter: Integer, **untyped) -> void
+
+    # : () -> String
+    def step1_data: () -> String
+
+    # : () -> String
+    def step2_data: () -> String
+
+    # : () -> Integer
+    def counter: () -> Integer
+  end
+
+  class Output
+    # : (step1_data: String, step2_data: String, step3_data: String, counter: Integer, final: bool, **untyped) -> void
+    def initialize: (step1_data: String, step2_data: String, step3_data: String, counter: Integer, final: bool, **untyped) -> void
+
+    # : () -> String
+    def step1_data: () -> String
+
+    # : () -> String
+    def step2_data: () -> String
+
+    # : () -> String
+    def step3_data: () -> String
+
+    # : () -> Integer
+    def counter: () -> Integer
+
+    # : () -> bool
+    def final: () -> bool
+  end
+
+  # : (Input) -> SenroUsecaser::Result[Output]
+  def call: (Input) -> SenroUsecaser::Result[Output]
+end
+
+class WrapAccumulatedOutputUseCase < SenroUsecaser::Base
+  class Input
+    # : (counter: Integer, final: bool, **untyped) -> void
+    def initialize: (counter: Integer, final: bool, **untyped) -> void
+
+    # : () -> Integer
+    def counter: () -> Integer
+
+    # : () -> bool
+    def final: () -> bool
+  end
+
+  # : (Input) -> SenroUsecaser::Result[AccumulatedOutput]
+  def call: (Input) -> SenroUsecaser::Result[AccumulatedOutput]
+end
+
+class AccumulatedContextDemo < SenroUsecaser::Base
+  class Input
+    # : (initial: String, **untyped) -> void
+    def initialize: (initial: String, **untyped) -> void
+
+    # : () -> String
+    def initial: () -> String
+  end
+
+  def self.call: (Input, ?container: SenroUsecaser::Container) -> SenroUsecaser::Result[AccumulatedOutput]
+
+  def call: (Input) -> SenroUsecaser::Result[AccumulatedOutput]
+
+  # : (Hash[Symbol, untyped]) -> bool
+  def check_accumulated: (Hash[Symbol, untyped]) -> bool
+end
