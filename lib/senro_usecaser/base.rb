@@ -368,15 +368,13 @@ module SenroUsecaser
       @_capture_exceptions = capture_exceptions
 
       # Pass input directly to hooks and call
+      unless self.class.input_class || self.class.organized_steps
+        raise ArgumentError, "#{self.class.name} must define `input` class"
+      end
+
       context = input || args
       execute_with_hooks(context) do
-        if self.class.input_class || self.class.organized_steps
-          # Input class or pipeline - pass input directly
-          call(input)
-        else
-          # Keyword arguments style
-          call(**args)
-        end
+        call(input)
       end
     end
 

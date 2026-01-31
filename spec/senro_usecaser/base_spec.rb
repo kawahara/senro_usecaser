@@ -4,39 +4,54 @@ RSpec.describe SenroUsecaser::Base do
   # Reset global container before each test
   before { SenroUsecaser.reset_container! }
 
+  # Common input class for simple tests
+  let(:simple_input) { Struct.new(:value, :message, :should_raise, keyword_init: true) }
+
   # Test UseCase that returns success
   let(:success_use_case) do
+    input_class = simple_input
     Class.new(described_class) do
-      def call(value:)
-        success(value)
+      input input_class
+
+      def call(input)
+        success(input.value)
       end
     end
   end
 
   # Test UseCase that returns failure
   let(:failure_use_case) do
+    input_class = simple_input
     Class.new(described_class) do
-      def call(message:)
-        failure(SenroUsecaser::Error.new(code: :test_error, message: message))
+      input input_class
+
+      def call(input)
+        failure(SenroUsecaser::Error.new(code: :test_error, message: input.message))
       end
     end
   end
 
   # Test UseCase that raises an exception
   let(:raising_use_case) do
+    input_class = simple_input
     Class.new(described_class) do
-      def call(message:)
-        raise StandardError, message
+      input input_class
+
+      def call(input)
+        raise StandardError, input.message
       end
     end
   end
 
   # Test UseCase that uses capture
   let(:capture_use_case) do
+    input_class = simple_input
     Class.new(described_class) do
-      def call(should_raise:)
+      input input_class
+
+      def call(input)
         capture(code: :captured) do
-          raise StandardError, "Error" if should_raise
+          raise StandardError, "Error" if input.should_raise
 
           "success"
         end
@@ -46,14 +61,14 @@ RSpec.describe SenroUsecaser::Base do
 
   describe ".call" do
     it "creates an instance and calls #call" do
-      result = success_use_case.call(value: "hello")
+      result = success_use_case.call(simple_input.new(value: "hello"))
 
       expect(result).to be_success
       expect(result.value).to eq("hello")
     end
 
     it "returns failure result" do
-      result = failure_use_case.call(message: "Something went wrong")
+      result = failure_use_case.call(simple_input.new(message: "Something went wrong"))
 
       expect(result).to be_failure
       expect(result.errors.first.message).to eq("Something went wrong")
@@ -62,14 +77,14 @@ RSpec.describe SenroUsecaser::Base do
 
   describe ".call!" do
     it "returns success result when no exception is raised" do
-      result = success_use_case.call!(value: "hello")
+      result = success_use_case.call!(simple_input.new(value: "hello"))
 
       expect(result).to be_success
       expect(result.value).to eq("hello")
     end
 
     it "captures exceptions and returns failure result" do
-      result = raising_use_case.call!(message: "Error occurred")
+      result = raising_use_case.call!(simple_input.new(message: "Error occurred"))
 
       expect(result).to be_failure
       expect(result.errors.first.message).to eq("Error occurred")
@@ -157,7 +172,7 @@ RSpec.describe SenroUsecaser::Base do
 
   describe ".call_with_capture" do
     it "captures exceptions with custom code" do
-      result = raising_use_case.call_with_capture(input: { message: "Error" }, code: :custom_error)
+      result = raising_use_case.call_with_capture(input: simple_input.new(message: "Error"), code: :custom_error)
 
       expect(result).to be_failure
       expect(result.errors.first.code).to eq(:custom_error)
@@ -165,10 +180,14 @@ RSpec.describe SenroUsecaser::Base do
 
     it "captures only specified exception classes" do
       custom_error_class = Class.new(StandardError)
+      capture_input = Struct.new(:raise_type, keyword_init: true)
 
+      input_class = capture_input
       use_case = Class.new(described_class) do
-        def call(raise_type:)
-          raise StandardError, "Standard error" if raise_type == :standard
+        input input_class
+
+        def call(input)
+          raise StandardError, "Standard error" if input.raise_type == :standard
 
           success("ok")
         end
@@ -177,7 +196,7 @@ RSpec.describe SenroUsecaser::Base do
       # Should not capture StandardError when only CustomError is specified
       expect do
         use_case.call_with_capture(
-          input: { raise_type: :standard },
+          input: capture_input.new(raise_type: :standard),
           exception_classes: [custom_error_class]
         )
       end.to raise_error(StandardError)
@@ -186,34 +205,37 @@ RSpec.describe SenroUsecaser::Base do
 
   describe "#call" do
     it "raises NotImplementedError when not overridden" do
-      empty_use_case = Class.new(described_class)
+      input_class = simple_input
+      empty_use_case = Class.new(described_class) do
+        input input_class
+      end
 
-      expect { empty_use_case.call }.to raise_error(NotImplementedError)
+      expect { empty_use_case.call(simple_input.new) }.to raise_error(NotImplementedError)
     end
   end
 
   describe "#success" do
     it "is available in subclasses" do
-      expect(success_use_case.call(value: "test")).to be_success
+      expect(success_use_case.call(simple_input.new(value: "test"))).to be_success
     end
   end
 
   describe "#failure" do
     it "is available in subclasses" do
-      expect(failure_use_case.call(message: "error")).to be_failure
+      expect(failure_use_case.call(simple_input.new(message: "error"))).to be_failure
     end
   end
 
   describe "#capture" do
     it "returns success when block succeeds" do
-      result = capture_use_case.call(should_raise: false)
+      result = capture_use_case.call(simple_input.new(should_raise: false))
 
       expect(result).to be_success
       expect(result.value).to eq("success")
     end
 
     it "returns failure when block raises" do
-      result = capture_use_case.call(should_raise: true)
+      result = capture_use_case.call(simple_input.new(should_raise: true))
 
       expect(result).to be_failure
       expect(result.errors.first.code).to eq(:captured)
@@ -222,15 +244,18 @@ RSpec.describe SenroUsecaser::Base do
 
   describe "#failure_from_exception" do
     it "creates failure from exception" do
+      input_class = simple_input
       use_case = Class.new(described_class) do
-        def call(**)
+        input input_class
+
+        def call(_input)
           raise StandardError, "Not found"
         rescue StandardError => e
           failure_from_exception(e, code: :not_found)
         end
       end
 
-      result = use_case.call
+      result = use_case.call(simple_input.new)
 
       expect(result).to be_failure
       expect(result.errors.first.code).to eq(:not_found)
@@ -250,15 +275,17 @@ RSpec.describe SenroUsecaser::Base do
     it "resolves dependencies from global container" do
       SenroUsecaser.container.register(:logger, "test_logger")
 
+      input_class = simple_input
       use_case = Class.new(described_class) do
+        input input_class
         depends_on :logger
 
-        def call
+        def call(_input)
           success(logger)
         end
       end
 
-      result = use_case.call
+      result = use_case.call(simple_input.new)
 
       expect(result.value).to eq("test_logger")
     end
@@ -267,30 +294,34 @@ RSpec.describe SenroUsecaser::Base do
       container = SenroUsecaser::Container.new
       container.register(:logger, "custom_logger")
 
+      input_class = simple_input
       use_case = Class.new(described_class) do
+        input input_class
         depends_on :logger
 
-        def call
+        def call(_input)
           success(logger)
         end
       end
 
-      result = use_case.call(container: container)
+      result = use_case.call(simple_input.new, container: container)
 
       expect(result.value).to eq("custom_logger")
     end
 
     it "allows manual dependency injection for testing" do
+      input_class = simple_input
       use_case = Class.new(described_class) do
+        input input_class
         depends_on :logger
 
-        def call
+        def call(_input)
           success(logger)
         end
       end
 
       instance = use_case.new(dependencies: { logger: "mock_logger" })
-      result = instance.perform
+      result = instance.perform(simple_input.new)
 
       expect(result.value).to eq("mock_logger")
     end
@@ -310,16 +341,18 @@ RSpec.describe SenroUsecaser::Base do
         ns.register(:logger, "admin_logger")
       end
 
+      input_class = simple_input
       use_case = Class.new(described_class) do
+        input input_class
         namespace :admin
         depends_on :logger
 
-        def call
+        def call(_input)
           success(logger)
         end
       end
 
-      result = use_case.call
+      result = use_case.call(simple_input.new)
 
       expect(result.value).to eq("admin_logger")
     end
@@ -330,16 +363,18 @@ RSpec.describe SenroUsecaser::Base do
         ns.register(:other, "admin_other")
       end
 
+      input_class = simple_input
       use_case = Class.new(described_class) do
+        input input_class
         namespace :admin
         depends_on :logger
 
-        def call
+        def call(_input)
           success(logger)
         end
       end
 
-      result = use_case.call
+      result = use_case.call(simple_input.new)
 
       expect(result.value).to eq("root_logger")
     end
@@ -1041,55 +1076,64 @@ RSpec.describe SenroUsecaser::Base do
   end
 
   describe "hooks" do
+    let(:hook_input) { Struct.new(:value, keyword_init: true) }
+
     describe "before hook" do
       it "runs before the main call" do
         call_order = []
+        input_class = hook_input
 
         use_case = Class.new(described_class) do
+          input input_class
           before { call_order << :before }
 
-          define_method(:call) do |value:|
+          define_method(:call) do |input|
             call_order << :call
-            success(value)
+            success(input.value)
           end
         end
 
-        use_case.call(value: "test")
+        use_case.call(hook_input.new(value: "test"))
 
         expect(call_order).to eq(%i[before call])
       end
 
       it "receives context as argument" do
         received_context = nil
+        input_class = hook_input
 
         use_case = Class.new(described_class) do
+          input input_class
           before { |ctx| received_context = ctx }
 
-          def call(value:)
-            success(value)
+          def call(input)
+            success(input.value)
           end
         end
 
-        use_case.call(value: "test")
+        input = hook_input.new(value: "test")
+        use_case.call(input)
 
-        expect(received_context).to eq({ value: "test" })
+        expect(received_context).to eq(input)
       end
     end
 
     describe "after hook" do
       it "runs after the main call" do
         call_order = []
+        input_class = hook_input
 
         use_case = Class.new(described_class) do
+          input input_class
           after { call_order << :after }
 
-          define_method(:call) do |value:|
+          define_method(:call) do |input|
             call_order << :call
-            success(value)
+            success(input.value)
           end
         end
 
-        use_case.call(value: "test")
+        use_case.call(hook_input.new(value: "test"))
 
         expect(call_order).to eq(%i[call after])
       end
@@ -1097,21 +1141,24 @@ RSpec.describe SenroUsecaser::Base do
       it "receives context and result as arguments" do
         received_context = nil
         received_result = nil
+        input_class = hook_input
 
         use_case = Class.new(described_class) do
+          input input_class
           after do |ctx, result|
             received_context = ctx
             received_result = result
           end
 
-          def call(value:)
-            success(value)
+          def call(input)
+            success(input.value)
           end
         end
 
-        use_case.call(value: "test")
+        input = hook_input.new(value: "test")
+        use_case.call(input)
 
-        expect(received_context).to eq({ value: "test" })
+        expect(received_context).to eq(input)
         expect(received_result).to be_success
         expect(received_result.value).to eq("test")
       end
@@ -1120,8 +1167,10 @@ RSpec.describe SenroUsecaser::Base do
     describe "around hook" do
       it "wraps the main call" do
         call_order = []
+        input_class = hook_input
 
         use_case = Class.new(described_class) do
+          input input_class
           around do |_ctx, &block|
             call_order << :around_before
             result = block.call
@@ -1129,49 +1178,54 @@ RSpec.describe SenroUsecaser::Base do
             result
           end
 
-          define_method(:call) do |value:|
+          define_method(:call) do |input|
             call_order << :call
-            success(value)
+            success(input.value)
           end
         end
 
-        use_case.call(value: "test")
+        use_case.call(hook_input.new(value: "test"))
 
         expect(call_order).to eq(%i[around_before call around_after])
       end
 
       it "can modify the result" do
+        input_class = hook_input
+
         use_case = Class.new(described_class) do
+          input input_class
           around do |_ctx, &block|
             result = block.call
             SenroUsecaser::Result.success("#{result.value}_modified")
           end
 
-          def call(value:)
-            success(value)
+          def call(input)
+            success(input.value)
           end
         end
 
-        result = use_case.call(value: "test")
+        result = use_case.call(hook_input.new(value: "test"))
 
         expect(result.value).to eq("test_modified")
       end
 
       it "can short-circuit execution" do
         call_count = 0
+        input_class = hook_input
 
         use_case = Class.new(described_class) do
+          input input_class
           around do |_ctx, &_block|
             SenroUsecaser::Result.failure(SenroUsecaser::Error.new(code: :blocked, message: "Blocked"))
           end
 
-          define_method(:call) do |value:|
+          define_method(:call) do |input|
             call_count += 1
-            success(value)
+            success(input.value)
           end
         end
 
-        result = use_case.call(value: "test")
+        result = use_case.call(hook_input.new(value: "test"))
 
         expect(result).to be_failure
         expect(call_count).to eq(0)
@@ -1181,8 +1235,10 @@ RSpec.describe SenroUsecaser::Base do
     describe "multiple hooks" do
       it "runs hooks in order: before -> around -> call -> around -> after" do
         call_order = []
+        input_class = hook_input
 
         use_case = Class.new(described_class) do
+          input input_class
           before { call_order << :before }
 
           around do |_ctx, &block|
@@ -1194,13 +1250,13 @@ RSpec.describe SenroUsecaser::Base do
 
           after { call_order << :after }
 
-          define_method(:call) do |value:|
+          define_method(:call) do |input|
             call_order << :call
-            success(value)
+            success(input.value)
           end
         end
 
-        use_case.call(value: "test")
+        use_case.call(hook_input.new(value: "test"))
 
         expect(call_order).to eq(%i[before around_before call around_after after])
       end
@@ -1209,6 +1265,7 @@ RSpec.describe SenroUsecaser::Base do
     describe "extend_with" do
       it "runs extension hooks" do
         call_order = []
+        input_class = hook_input
 
         extension = Module.new do
           define_singleton_method(:before) { |_ctx| call_order << :ext_before }
@@ -1216,21 +1273,23 @@ RSpec.describe SenroUsecaser::Base do
         end
 
         use_case = Class.new(described_class) do
+          input input_class
           extend_with extension
 
-          define_method(:call) do |value:|
+          define_method(:call) do |input|
             call_order << :call
-            success(value)
+            success(input.value)
           end
         end
 
-        use_case.call(value: "test")
+        use_case.call(hook_input.new(value: "test"))
 
         expect(call_order).to eq(%i[ext_before call ext_after])
       end
 
       it "runs multiple extension hooks in order" do
         call_order = []
+        input_class = hook_input
 
         ext1 = Module.new do
           define_singleton_method(:before) { |_ctx| call_order << :ext1_before }
@@ -1241,20 +1300,23 @@ RSpec.describe SenroUsecaser::Base do
         end
 
         use_case = Class.new(described_class) do
+          input input_class
           extend_with ext1, ext2
 
-          define_method(:call) do |value:|
+          define_method(:call) do |input|
             call_order << :call
-            success(value)
+            success(input.value)
           end
         end
 
-        use_case.call(value: "test")
+        use_case.call(hook_input.new(value: "test"))
 
         expect(call_order).to eq(%i[ext1_before ext2_before call])
       end
 
       it "supports around hooks in extensions" do
+        input_class = hook_input
+
         extension = Module.new do
           def self.around(_ctx, &block)
             result = block.call
@@ -1263,14 +1325,15 @@ RSpec.describe SenroUsecaser::Base do
         end
 
         use_case = Class.new(described_class) do
+          input input_class
           extend_with extension
 
-          def call(value:)
-            success(value)
+          def call(input)
+            success(input.value)
           end
         end
 
-        result = use_case.call(value: 5)
+        result = use_case.call(hook_input.new(value: 5))
 
         expect(result.value).to eq(15)
       end
@@ -1279,21 +1342,23 @@ RSpec.describe SenroUsecaser::Base do
     describe "inheritance" do
       it "inherits hooks from parent" do
         call_order = []
+        input_class = hook_input
 
         parent = Class.new(described_class) do
+          input input_class
           before { call_order << :parent_before }
         end
 
         child = Class.new(parent) do
           before { call_order << :child_before }
 
-          define_method(:call) do |value:|
+          define_method(:call) do |input|
             call_order << :call
-            success(value)
+            success(input.value)
           end
         end
 
-        child.call(value: "test")
+        child.call(hook_input.new(value: "test"))
 
         expect(call_order).to eq(%i[parent_before child_before call])
       end
@@ -1301,67 +1366,84 @@ RSpec.describe SenroUsecaser::Base do
   end
 
   describe "implicit success wrapping" do
+    let(:wrap_input) { Struct.new(:value, keyword_init: true) }
+
     describe "single UseCase" do
       it "wraps plain value in Result.success" do
+        input_class = wrap_input
         use_case = Class.new(described_class) do
-          def call(value:)
-            value * 2
+          input input_class
+
+          def call(input)
+            input.value * 2
           end
         end
 
-        result = use_case.call(value: 10)
+        result = use_case.call(wrap_input.new(value: 10))
 
         expect(result).to be_success
         expect(result.value).to eq(20)
       end
 
       it "wraps nil in Result.success" do
+        input_class = wrap_input
         use_case = Class.new(described_class) do
-          def call(**)
+          input input_class
+
+          def call(_input)
             nil
           end
         end
 
-        result = use_case.call(value: 10)
+        result = use_case.call(wrap_input.new(value: 10))
 
         expect(result).to be_success
         expect(result.value).to be_nil
       end
 
       it "wraps Hash in Result.success" do
+        input_class = wrap_input
         use_case = Class.new(described_class) do
-          def call(value:)
-            { result: value * 2 }
+          input input_class
+
+          def call(input)
+            { result: input.value * 2 }
           end
         end
 
-        result = use_case.call(value: 10)
+        result = use_case.call(wrap_input.new(value: 10))
 
         expect(result).to be_success
         expect(result.value).to eq({ result: 20 })
       end
 
       it "wraps String in Result.success" do
+        input_class = wrap_input
         use_case = Class.new(described_class) do
-          def call(value:)
-            "Result: #{value}"
+          input input_class
+
+          def call(input)
+            "Result: #{input.value}"
           end
         end
 
-        result = use_case.call(value: 10)
+        result = use_case.call(wrap_input.new(value: 10))
 
         expect(result).to be_success
         expect(result.value).to eq("Result: 10")
       end
 
       it "wraps Array in Result.success" do
+        input_class = wrap_input
         use_case = Class.new(described_class) do
-          def call(value:)
-            [value, value * 2, value * 3]
+          input input_class
+
+          def call(input)
+            [input.value, input.value * 2, input.value * 3]
           end
         end
 
-        result = use_case.call(value: 10)
+        result = use_case.call(wrap_input.new(value: 10))
 
         expect(result).to be_success
         expect(result.value).to eq([10, 20, 30])
@@ -1369,14 +1451,17 @@ RSpec.describe SenroUsecaser::Base do
 
       it "wraps custom object in Result.success" do
         custom_class = Struct.new(:data)
+        input_class = wrap_input
 
         use_case = Class.new(described_class) do
-          define_method(:call) do |value:|
-            custom_class.new(value * 2)
+          input input_class
+
+          define_method(:call) do |input|
+            custom_class.new(input.value * 2)
           end
         end
 
-        result = use_case.call(value: 10)
+        result = use_case.call(wrap_input.new(value: 10))
 
         expect(result).to be_success
         expect(result.value).to be_a(custom_class)
@@ -1384,26 +1469,32 @@ RSpec.describe SenroUsecaser::Base do
       end
 
       it "does not double-wrap explicit Result.success" do
+        input_class = wrap_input
         use_case = Class.new(described_class) do
-          def call(value:)
-            success(value * 2)
+          input input_class
+
+          def call(input)
+            success(input.value * 2)
           end
         end
 
-        result = use_case.call(value: 10)
+        result = use_case.call(wrap_input.new(value: 10))
 
         expect(result).to be_success
         expect(result.value).to eq(20)
       end
 
       it "does not wrap explicit Result.failure" do
+        input_class = wrap_input
         use_case = Class.new(described_class) do
-          def call(**)
+          input input_class
+
+          def call(_input)
             failure(SenroUsecaser::Error.new(code: :test, message: "test"))
           end
         end
 
-        result = use_case.call(value: 10)
+        result = use_case.call(wrap_input.new(value: 10))
 
         expect(result).to be_failure
       end
@@ -1486,16 +1577,18 @@ RSpec.describe SenroUsecaser::Base do
     describe "with hooks" do
       it "after hook receives wrapped Result" do
         received_result = nil
+        input_class = wrap_input
 
         use_case = Class.new(described_class) do
+          input input_class
           after { |_ctx, result| received_result = result }
 
-          def call(value:)
-            value * 2
+          def call(input)
+            input.value * 2
           end
         end
 
-        use_case.call(value: 10)
+        use_case.call(wrap_input.new(value: 10))
 
         expect(received_result).to be_a(SenroUsecaser::Result)
         expect(received_result).to be_success
@@ -1503,7 +1596,10 @@ RSpec.describe SenroUsecaser::Base do
       end
 
       it "around hook can modify wrapped Result" do
+        input_class = wrap_input
+
         use_case = Class.new(described_class) do
+          input input_class
           around do |_ctx, &block|
             result = block.call
             if result.success?
@@ -1513,12 +1609,12 @@ RSpec.describe SenroUsecaser::Base do
             end
           end
 
-          def call(value:)
-            value * 2
+          def call(input)
+            input.value * 2
           end
         end
 
-        result = use_case.call(value: 5)
+        result = use_case.call(wrap_input.new(value: 5))
 
         expect(result).to be_success
         expect(result.value).to eq(110) # (5 * 2) + 100
