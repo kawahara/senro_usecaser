@@ -276,17 +276,41 @@ module SenroUsecaser
         @around_hooks ||= []
       end
 
-      # Declares the expected input type for this UseCase
+      # Declares the expected input type(s) for this UseCase
+      # Accepts a Class or one or more Modules that input must include
       #
-      #: (Class) -> void
-      def input(type)
-        @input_class = type
+      # @example Single class
+      #   input UserInput
+      #
+      # @example Single module (interface)
+      #   input HasUserId
+      #
+      # @example Multiple modules (interfaces)
+      #   input HasUserId, HasEmail
+      #
+      #: (*Module) -> void
+      def input(*types)
+        @input_types = types
       end
 
-      # Returns the input class
+      # Returns the input types as an array
       #
-      #: () -> Class?
-      attr_reader :input_class
+      #: () -> Array[Module]
+      def input_types
+        @input_types || []
+      end
+
+      # Returns the input class (for backwards compatibility)
+      # If a Class is specified, returns it. Otherwise returns the first type.
+      #
+      #: () -> Module?
+      def input_class
+        types = input_types
+        return nil if types.empty?
+
+        # Class があればそれを返す（単一 Class 指定の後方互換）
+        types.find { |t| t.is_a?(Class) } || types.first
+      end
 
       # Declares the expected output type for this UseCase
       #
@@ -340,7 +364,7 @@ module SenroUsecaser
         subclass.instance_variable_set(:@use_case_namespace, @use_case_namespace)
         subclass.instance_variable_set(:@organized_steps, @organized_steps&.dup)
         subclass.instance_variable_set(:@on_failure_strategy, @on_failure_strategy)
-        subclass.instance_variable_set(:@input_class, @input_class)
+        subclass.instance_variable_set(:@input_types, @input_types&.dup)
         subclass.instance_variable_set(:@output_schema, @output_schema)
       end
 
@@ -371,6 +395,8 @@ module SenroUsecaser
       unless self.class.input_class || self.class.organized_steps
         raise ArgumentError, "#{self.class.name} must define `input` class"
       end
+
+      validate_input!(input)
 
       execute_with_hooks(input) do
         call(input)
@@ -416,6 +442,48 @@ module SenroUsecaser
       Result.capture(*exception_classes, code: code, &)
     end
 
+    # Validates that input satisfies all declared input types
+    # For Modules: checks if input's class includes the module
+    # For Classes: checks if input is an instance of the class
+    #
+    #: (untyped) -> void
+    def validate_input!(input)
+      types = self.class.input_types
+      return if types.empty?
+
+      types.each do |expected_type|
+        if expected_type.is_a?(Module) && !expected_type.is_a?(Class)
+          # Module の場合: include しているかを検査
+          unless input.class.include?(expected_type)
+            raise ArgumentError,
+                  "Input #{input.class} must include #{expected_type}"
+          end
+        elsif !input.is_a?(expected_type)
+          # Class の場合: インスタンスかを検査
+          raise ArgumentError,
+                "Input must be an instance of #{expected_type}, got #{input.class}"
+        end
+      end
+    end
+
+    # Validates that the result's value satisfies the declared output type
+    # Only validates if result is success and output_schema is a Class
+    #
+    #: (Result[untyped]) -> void
+    def validate_output!(result)
+      return unless result.success?
+
+      expected_type = self.class.output_schema
+      return if expected_type.nil?
+      return unless expected_type.is_a?(Class)
+
+      value = result.value
+      return if value.is_a?(expected_type)
+
+      raise TypeError,
+            "Output must be an instance of #{expected_type}, got #{value.class}"
+    end
+
     # Executes the core logic with before/after/around hooks
     #
     #: (untyped) { () -> Result[untyped] } -> Result[untyped]
@@ -423,6 +491,7 @@ module SenroUsecaser
       execution = build_around_chain(input, core_block)
       run_before_hooks(input)
       result = execution.call
+      validate_output!(result)
       run_after_hooks(input, result)
       result
     end
@@ -692,12 +761,12 @@ module SenroUsecaser
     end
 
     # Calls a single UseCase in the pipeline
-    # Requires input_class to be defined for pipeline steps
+    # Requires input type(s) to be defined for pipeline steps
     #
     #: (singleton(Base), untyped) -> Result[untyped]
     def call_use_case(use_case_class, input)
-      unless use_case_class.input_class
-        raise ArgumentError, "#{use_case_class.name} must define `input` class to be used in a pipeline"
+      if use_case_class.input_types.empty?
+        raise ArgumentError, "#{use_case_class.name} must define `input` type(s) to be used in a pipeline"
       end
 
       call_method = @_capture_exceptions || false ? :call! : :call #: Symbol

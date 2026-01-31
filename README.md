@@ -442,6 +442,179 @@ end
 
 The `**_rest` parameter in Input's initialize allows extra fields to be passed through pipeline steps without errors.
 
+### Runtime Type Validation
+
+In addition to static type checking with RBS, SenroUsecaser provides runtime type validation for Input and Output. This ensures that the actual values passed at runtime match the expected types.
+
+#### Input Type Validation
+
+The `input` declaration supports three patterns:
+
+##### 1. Class Validation (Traditional)
+
+When a Class is specified, input must be an instance of that class:
+
+```ruby
+class CreateUserUseCase < SenroUsecaser::Base
+  input CreateUserInput  # Class
+
+  def call(input)
+    # input must be a CreateUserInput instance
+    success(input.name)
+  end
+end
+
+# OK
+CreateUserUseCase.call(CreateUserInput.new(name: "Taro"))
+
+# ArgumentError: Input must be an instance of CreateUserInput, got String
+CreateUserUseCase.call("invalid")
+```
+
+##### 2. Interface Validation (Single Module)
+
+When a Module is specified, input's class must include that module. This enables duck-typing with explicit interface contracts:
+
+```ruby
+# Define interface
+module HasUserId
+  def user_id
+    raise NotImplementedError
+  end
+end
+
+# UseCase expects input that includes HasUserId
+class FindUserUseCase < SenroUsecaser::Base
+  input HasUserId
+
+  #: (HasUserId) -> SenroUsecaser::Result[User]
+  def call(input)
+    user = User.find(input.user_id)
+    success(user)
+  end
+end
+
+# Input class that implements the interface
+class UserQuery
+  include HasUserId
+
+  attr_reader :user_id
+
+  def initialize(user_id:)
+    @user_id = user_id
+  end
+end
+
+# OK - UserQuery includes HasUserId
+FindUserUseCase.call(UserQuery.new(user_id: 123))
+
+# ArgumentError: Input UserQuery must include HasUserId
+class InvalidInput
+  attr_reader :user_id
+  def initialize(user_id:) = @user_id = user_id
+end
+FindUserUseCase.call(InvalidInput.new(user_id: 123))
+```
+
+##### 3. Multiple Interfaces Validation
+
+Multiple Modules can be specified. The input must include ALL of them:
+
+```ruby
+module HasUserId
+  def user_id = raise NotImplementedError
+end
+
+module HasEmail
+  def email = raise NotImplementedError
+end
+
+# UseCase requires both interfaces
+class NotifyUserUseCase < SenroUsecaser::Base
+  input HasUserId, HasEmail
+
+  #: ((HasUserId & HasEmail)) -> SenroUsecaser::Result[bool]
+  def call(input)
+    notify(input.user_id, input.email)
+    success(true)
+  end
+end
+
+# Input class must include both modules
+class NotificationRequest
+  include HasUserId
+  include HasEmail
+
+  attr_reader :user_id, :email
+
+  def initialize(user_id:, email:)
+    @user_id = user_id
+    @email = email
+  end
+end
+
+# OK
+NotifyUserUseCase.call(NotificationRequest.new(user_id: 123, email: "test@example.com"))
+```
+
+##### Interface Pattern in Pipelines
+
+Interface validation is especially useful for sub-UseCases in pipelines. A parent UseCase's Input can include multiple interfaces, and each step only requires the interfaces it needs:
+
+```ruby
+# Parent UseCase - Input includes both interfaces
+class ProcessOrderUseCase < SenroUsecaser::Base
+  class Input
+    include HasUserId
+    include HasEmail
+
+    attr_reader :user_id, :email, :order_items
+
+    def initialize(user_id:, email:, order_items:)
+      @user_id = user_id
+      @email = email
+      @order_items = order_items
+    end
+  end
+
+  input Input
+
+  organize do
+    step FindUserUseCase      # Only needs HasUserId
+    step NotifyUserUseCase    # Needs HasUserId and HasEmail
+    step CreateOrderUseCase
+  end
+end
+```
+
+#### Output Type Validation
+
+When `output` is declared with a Class, the success result's value is validated:
+
+```ruby
+class UserOutput
+  attr_reader :user
+  def initialize(user:) = @user = user
+end
+
+class FindUserUseCase < SenroUsecaser::Base
+  input FindUserInput
+  output UserOutput  # Class declaration enables validation
+
+  def call(input)
+    user = User.find(input.user_id)
+    success(UserOutput.new(user: user))  # OK
+
+    # TypeError: Output must be an instance of UserOutput, got User
+    # success(user)  # Wrong! Must wrap in UserOutput
+  end
+end
+```
+
+**Note:** When `output` is a Hash schema (e.g., `output({ user: User })`), validation is skipped for backwards compatibility.
+
+**Note:** Type validation errors raise exceptions (`ArgumentError` for input, `TypeError` for output). See [`.call` vs `.call!`](#call-vs-call-1) for how exceptions are handled.
+
 ### Simplicity
 
 Define UseCases with minimal boilerplate. Avoids over-abstraction and provides an intuitive API.
@@ -1006,6 +1179,28 @@ end
 ```
 
 Use `.call!` when you want to ensure all exceptions are captured as `Result.failure` without explicit rescue blocks in your UseCase.
+
+**Type validation errors** (from `input` and `output` declarations) also follow this pattern:
+
+```ruby
+# With .call - type validation errors raise exceptions
+begin
+  UseCase.call(invalid_input)
+rescue ArgumentError => e
+  puts e.message  # "Input SomeClass must include HasUserId"
+end
+
+# With .call! - type validation errors become Result.failure
+result = UseCase.call!(invalid_input)
+result.failure?              # => true
+result.errors.first.code     # => :exception
+result.errors.first.message  # => "Input SomeClass must include HasUserId"
+```
+
+| Validation | Exception type | With `.call` | With `.call!` |
+|------------|---------------|--------------|---------------|
+| Input type | `ArgumentError` | Raises | `Result.failure` |
+| Output type | `TypeError` | Raises | `Result.failure` |
 
 #### Exception Handling in Pipelines
 

@@ -63,7 +63,7 @@ module SenroUsecaser
     #   end
     #
     # : () { () -> bool } -> void
-    def self.enabled_if: () { () -> boolish } -> void
+    def self.enabled_if: () { () -> bool } -> void
 
     # Returns whether this provider is enabled
     #

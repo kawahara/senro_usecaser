@@ -188,15 +188,31 @@ module SenroUsecaser
     # : () -> Array[Proc]
     def self.around_hooks: () -> Array[Proc]
 
-    # Declares the expected input type for this UseCase
+    # Declares the expected input type(s) for this UseCase
+    # Accepts a Class or one or more Modules that input must include
     #
-    # : (Class) -> void
-    def self.input: (Class) -> void
+    # @example Single class
+    #   input UserInput
+    #
+    # @example Single module (interface)
+    #   input HasUserId
+    #
+    # @example Multiple modules (interfaces)
+    #   input HasUserId, HasEmail
+    #
+    # : (*Module) -> void
+    def self.input: (*Module) -> void
 
-    # Returns the input class
+    # Returns the input types as an array
     #
-    # : () -> Class?
-    attr_reader input_class: untyped
+    # : () -> Array[Module]
+    def self.input_types: () -> Array[Module]
+
+    # Returns the input class (for backwards compatibility)
+    # If a Class is specified, returns it. Otherwise returns the first type.
+    #
+    # : () -> Module?
+    def self.input_class: () -> Module?
 
     # Declares the expected output type for this UseCase
     #
@@ -266,6 +282,19 @@ module SenroUsecaser
     #
     # : [T] (*Class, ?code: Symbol) { () -> T } -> Result[T]
     def capture: [T] (*Class, ?code: Symbol) { () -> T } -> Result[T]
+
+    # Validates that input satisfies all declared input types
+    # For Modules: checks if input's class includes the module
+    # For Classes: checks if input is an instance of the class
+    #
+    # : (untyped) -> void
+    def validate_input!: (untyped) -> void
+
+    # Validates that the result's value satisfies the declared output type
+    # Only validates if result is success and output_schema is a Class
+    #
+    # : (Result[untyped]) -> void
+    def validate_output!: (Result[untyped]) -> void
 
     # Executes the core logic with before/after/around hooks
     #
@@ -378,7 +407,7 @@ module SenroUsecaser
     def step_should_stop?: (Step) -> bool
 
     # Calls a single UseCase in the pipeline
-    # Requires input_class to be defined for pipeline steps
+    # Requires input type(s) to be defined for pipeline steps
     #
     # : (singleton(Base), untyped) -> Result[untyped]
     def call_use_case: (singleton(Base), untyped) -> Result[untyped]

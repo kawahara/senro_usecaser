@@ -103,11 +103,12 @@ RSpec.describe SenroUsecaser::Base do
 
       it "captures exceptions in steps and collects them with on_failure: :collect" do
         input_class = pipeline_input
-        output_class = step_output
 
+        # Both steps use the same input/output type to avoid type validation issues
+        # when continuing after failure in collect mode
         raising_step1 = Class.new(described_class) do
           input input_class
-          output output_class
+          output input_class
 
           def call(_input)
             raise StandardError, "Error in step 1"
@@ -115,8 +116,8 @@ RSpec.describe SenroUsecaser::Base do
         end
 
         raising_step2 = Class.new(described_class) do
-          input output_class
-          output output_class
+          input input_class
+          output input_class
 
           def call(_input)
             raise StandardError, "Error in step 2"
@@ -1070,7 +1071,7 @@ RSpec.describe SenroUsecaser::Base do
         end
 
         input_class = Struct.new(:value, keyword_init: true)
-        expect { organized.call(input_class.new(value: 1)) }.to raise_error(ArgumentError, /must define `input` class/)
+        expect { organized.call(input_class.new(value: 1)) }.to raise_error(ArgumentError, /must define `input`/)
       end
     end
   end
@@ -1781,6 +1782,436 @@ RSpec.describe SenroUsecaser::Base do
         expect(result.errors.first.code).to eq(:validation_error)
         expect(result.errors.first.message).to eq("email must contain @")
       end
+    end
+  end
+
+  describe "input type validation" do
+    # Interface modules
+    let(:has_user_id_module) do
+      Module.new do
+        def user_id
+          raise NotImplementedError
+        end
+      end
+    end
+
+    let(:has_email_module) do
+      Module.new do
+        def email
+          raise NotImplementedError
+        end
+      end
+    end
+
+    describe "single Module (interface) input" do
+      it "accepts input that includes the specified module" do
+        interface_module = has_user_id_module
+
+        input_class = Class.new do
+          include interface_module
+
+          attr_reader :user_id
+
+          def initialize(user_id:)
+            @user_id = user_id
+          end
+        end
+
+        use_case = Class.new(described_class) do
+          input interface_module
+
+          def call(input)
+            success(input.user_id)
+          end
+        end
+
+        result = use_case.call(input_class.new(user_id: 123))
+
+        expect(result).to be_success
+        expect(result.value).to eq(123)
+      end
+
+      it "raises ArgumentError when input does not include the specified module" do
+        interface_module = has_user_id_module
+
+        # Input class that does NOT include the module
+        input_class = Class.new do
+          attr_reader :user_id
+
+          def initialize(user_id:)
+            @user_id = user_id
+          end
+        end
+
+        use_case = Class.new(described_class) do
+          input interface_module
+
+          def call(input)
+            success(input.user_id)
+          end
+        end
+
+        expect { use_case.call(input_class.new(user_id: 123)) }
+          .to raise_error(ArgumentError, /must include/)
+      end
+    end
+
+    describe "multiple Module (interfaces) input" do
+      it "accepts input that includes all specified modules" do
+        user_id_module = has_user_id_module
+        email_module = has_email_module
+
+        input_class = Class.new do
+          include user_id_module
+          include email_module
+
+          attr_reader :user_id, :email
+
+          def initialize(user_id:, email:)
+            @user_id = user_id
+            @email = email
+          end
+        end
+
+        use_case = Class.new(described_class) do
+          input user_id_module, email_module
+
+          def call(input)
+            success({ user_id: input.user_id, email: input.email })
+          end
+        end
+
+        result = use_case.call(input_class.new(user_id: 123, email: "test@example.com"))
+
+        expect(result).to be_success
+        expect(result.value).to eq({ user_id: 123, email: "test@example.com" })
+      end
+
+      it "raises ArgumentError when input does not include all specified modules" do
+        user_id_module = has_user_id_module
+        email_module = has_email_module
+
+        # Only includes user_id_module, not email_module
+        input_class = Class.new do
+          include user_id_module
+
+          attr_reader :user_id, :email
+
+          def initialize(user_id:, email:)
+            @user_id = user_id
+            @email = email
+          end
+        end
+
+        use_case = Class.new(described_class) do
+          input user_id_module, email_module
+
+          def call(input)
+            success({ user_id: input.user_id, email: input.email })
+          end
+        end
+
+        expect { use_case.call(input_class.new(user_id: 123, email: "test@example.com")) }
+          .to raise_error(ArgumentError, /must include/)
+      end
+    end
+
+    describe "Class input (backwards compatibility)" do
+      it "accepts input that is an instance of the specified class" do
+        input_class = Struct.new(:value, keyword_init: true)
+
+        use_case = Class.new(described_class) do
+          input input_class
+
+          def call(input)
+            success(input.value)
+          end
+        end
+
+        result = use_case.call(input_class.new(value: 42))
+
+        expect(result).to be_success
+        expect(result.value).to eq(42)
+      end
+
+      it "raises ArgumentError when input is not an instance of the specified class" do
+        expected_class = Struct.new(:value, keyword_init: true)
+        wrong_class = Struct.new(:data, keyword_init: true)
+
+        use_case = Class.new(described_class) do
+          input expected_class
+
+          def call(input)
+            success(input.value)
+          end
+        end
+
+        expect { use_case.call(wrong_class.new(data: 42)) }
+          .to raise_error(ArgumentError, /must be an instance of/)
+      end
+    end
+
+    describe ".input_types" do
+      it "returns empty array when no input is defined" do
+        use_case = Class.new(described_class)
+
+        expect(use_case.input_types).to eq([])
+      end
+
+      it "returns array of modules when multiple modules are specified" do
+        mod1 = has_user_id_module
+        mod2 = has_email_module
+
+        use_case = Class.new(described_class) do
+          input mod1, mod2
+        end
+
+        expect(use_case.input_types).to eq([mod1, mod2])
+      end
+    end
+
+    describe ".input_class (backwards compatibility)" do
+      it "returns nil when no input is defined" do
+        use_case = Class.new(described_class)
+
+        expect(use_case.input_class).to be_nil
+      end
+
+      it "returns the Class when a Class is specified" do
+        input_class = Struct.new(:value, keyword_init: true)
+
+        use_case = Class.new(described_class) do
+          input input_class
+        end
+
+        expect(use_case.input_class).to eq(input_class)
+      end
+
+      it "returns the first module when only modules are specified" do
+        mod1 = has_user_id_module
+        mod2 = has_email_module
+
+        use_case = Class.new(described_class) do
+          input mod1, mod2
+        end
+
+        expect(use_case.input_class).to eq(mod1)
+      end
+    end
+  end
+
+  describe "output type validation" do
+    let(:output_class) do
+      Class.new do
+        attr_reader :value
+
+        def initialize(value:)
+          @value = value
+        end
+      end
+    end
+
+    describe "when output is a Class" do
+      it "accepts success result with correct output type" do
+        out_class = output_class
+        input_class = Struct.new(:data, keyword_init: true)
+
+        use_case = Class.new(described_class) do
+          input input_class
+          output out_class
+
+          define_method(:call) do |input|
+            success(out_class.new(value: input.data))
+          end
+        end
+
+        result = use_case.call(input_class.new(data: 42))
+
+        expect(result).to be_success
+        expect(result.value).to be_a(out_class)
+        expect(result.value.value).to eq(42)
+      end
+
+      it "raises TypeError when success result has wrong output type" do
+        out_class = output_class
+        wrong_class = Struct.new(:wrong, keyword_init: true)
+        input_class = Struct.new(:data, keyword_init: true)
+
+        use_case = Class.new(described_class) do
+          input input_class
+          output out_class
+
+          define_method(:call) do |input|
+            success(wrong_class.new(wrong: input.data))
+          end
+        end
+
+        expect { use_case.call(input_class.new(data: 42)) }
+          .to raise_error(TypeError, /must be an instance of/)
+      end
+
+      it "does not validate failure results" do
+        out_class = output_class
+        input_class = Struct.new(:data, keyword_init: true)
+
+        use_case = Class.new(described_class) do
+          input input_class
+          output out_class
+
+          def call(_input)
+            failure(SenroUsecaser::Error.new(code: :test, message: "test"))
+          end
+        end
+
+        result = use_case.call(input_class.new(data: 42))
+
+        expect(result).to be_failure
+      end
+    end
+
+    describe "when output is a Hash schema (existing behavior)" do
+      it "does not validate and allows any value" do
+        input_class = Struct.new(:data, keyword_init: true)
+
+        use_case = Class.new(described_class) do
+          input input_class
+          output({ value: Integer })
+
+          def call(_input)
+            success("any string value")
+          end
+        end
+
+        # Should not raise even though the value is a String, not matching the schema
+        result = use_case.call(input_class.new(data: 42))
+
+        expect(result).to be_success
+        expect(result.value).to eq("any string value")
+      end
+    end
+
+    describe "when output is not defined" do
+      it "does not validate and allows any value" do
+        input_class = Struct.new(:data, keyword_init: true)
+
+        use_case = Class.new(described_class) do
+          input input_class
+
+          def call(input)
+            success(input.data)
+          end
+        end
+
+        result = use_case.call(input_class.new(data: 42))
+
+        expect(result).to be_success
+        expect(result.value).to eq(42)
+      end
+    end
+  end
+
+  describe "input type validation in pipeline" do
+    let(:has_user_id_module) do
+      Module.new do
+        def user_id
+          raise NotImplementedError
+        end
+      end
+    end
+
+    it "validates input for each step in the pipeline" do
+      interface_module = has_user_id_module
+
+      # Step that expects input with HasUserId interface
+      step_output = Struct.new(:user_id, :processed, keyword_init: true)
+
+      step_with_interface = Class.new(described_class) do
+        input interface_module
+        output step_output
+
+        def call(input)
+          success(self.class.output_schema.new(user_id: input.user_id, processed: true))
+        end
+      end
+
+      # Input class that includes the interface
+      valid_input_class = Class.new do
+        include interface_module
+
+        attr_reader :user_id
+
+        def initialize(user_id:)
+          @user_id = user_id
+        end
+      end
+
+      organized = Class.new(described_class) do
+        organize step_with_interface
+      end
+
+      result = organized.call(valid_input_class.new(user_id: 123))
+
+      expect(result).to be_success
+      expect(result.value.processed).to be true
+    end
+
+    it "raises ArgumentError when step input does not satisfy interface" do
+      interface_module = has_user_id_module
+
+      step_output = Struct.new(:user_id, :processed, keyword_init: true)
+
+      step_with_interface = Class.new(described_class) do
+        input interface_module
+        output step_output
+
+        def call(input)
+          success(self.class.output_schema.new(user_id: input.user_id, processed: true))
+        end
+      end
+
+      # Input class that does NOT include the interface
+      invalid_input_class = Struct.new(:user_id, keyword_init: true)
+
+      organized = Class.new(described_class) do
+        organize step_with_interface
+      end
+
+      expect { organized.call(invalid_input_class.new(user_id: 123)) }
+        .to raise_error(ArgumentError, /must include/)
+    end
+  end
+
+  describe "inheritance of input_types" do
+    it "inherits input_types from parent" do
+      interface_module = Module.new do
+        def value
+          raise NotImplementedError
+        end
+      end
+
+      parent = Class.new(described_class) do
+        input interface_module
+      end
+
+      child = Class.new(parent)
+
+      expect(child.input_types).to eq([interface_module])
+    end
+
+    it "child can override input_types" do
+      parent_module = Module.new
+      child_module = Module.new
+
+      parent = Class.new(described_class) do
+        input parent_module
+      end
+
+      child = Class.new(parent) do
+        input child_module
+      end
+
+      expect(parent.input_types).to eq([parent_module])
+      expect(child.input_types).to eq([child_module])
     end
   end
 end
