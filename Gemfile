@@ -18,6 +18,7 @@ gem "steep", "~> 1.9"
 
 # Linting
 gem "rubocop", "~> 1.69"
+gem "rubocop-on-rbs", "~> 1.0"
 gem "rubocop-rake", "~> 0.6"
 gem "rubocop-rspec", "~> 3.3"
 gem "rubocop-rubycw", "~> 0.2"

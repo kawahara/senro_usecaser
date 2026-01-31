@@ -2,12 +2,14 @@ plugins:
   - rubocop-rspec
   - rubocop-rake
   - rubocop-rubycw
+  - rubocop-on-rbs
 
 AllCops:
   TargetRubyVersion: 3.2
   NewCops: enable
   Exclude:
     - "examples/**/*"
+    - "vendor/**/*"
 
 Style/StringLiterals:
   EnforcedStyle: double_quotes

@@ -92,6 +92,11 @@ GEM
     rubocop-ast (1.49.0)
       parser (>= 3.3.7.2)
       prism (~> 1.7)
+    rubocop-on-rbs (1.9.0)
+      lint_roller (~> 1.1)
+      rbs (~> 3.5)
+      rubocop (>= 1.72.1, < 2.0)
+      zlib
     rubocop-rake (0.7.1)
       lint_roller (~> 1.1)
       rubocop (>= 1.72.1)
@@ -130,6 +135,7 @@ GEM
       unicode-emoji (~> 4.1)
     unicode-emoji (4.2.0)
     uri (1.1.1)
+    zlib (3.2.2)
 
 PLATFORMS
   aarch64-linux
@@ -148,6 +154,7 @@ DEPENDENCIES
   rbs-inline (~> 0.10)
   rspec (~> 3.0)
   rubocop (~> 1.69)
+  rubocop-on-rbs (~> 1.0)
   rubocop-rake (~> 0.6)
   rubocop-rspec (~> 3.3)
   rubocop-rubycw (~> 0.2)
