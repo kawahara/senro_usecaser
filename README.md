@@ -632,17 +632,17 @@ Add cross-cutting concerns like logging, authorization, or transaction handling.
 ```ruby
 # Define extension modules
 module Logging
-  def self.before(context)
-    puts "Starting: #{context.keys}"
+  def self.before(input)
+    puts "Starting: #{input.class.name}"
   end
 
-  def self.after(context, result)
+  def self.after(input, result)
     puts "Finished: #{result.success? ? 'success' : 'failure'}"
   end
 end
 
 module Transaction
-  def self.around(context, &block)
+  def self.around(input, &block)
     ActiveRecord::Base.transaction { block.call }
   end
 end
@@ -661,15 +661,15 @@ end
 
 ```ruby
 class CreateUserUseCase < SenroUsecaser::Base
-  before do |context|
+  before do |input|
     # runs before call
   end
 
-  after do |context, result|
+  after do |input, result|
     # runs after call
   end
 
-  around do |context, &block|
+  around do |input, &block|
     ActiveRecord::Base.transaction do
       block.call
     end
@@ -688,11 +688,11 @@ Use `extend_with` to integrate validation libraries like ActiveModel::Validation
 ```ruby
 # Define validation extension
 module InputValidation
-  def self.around(context, &block)
-    # context is the input object passed to call
-    return block.call unless context.respond_to?(:validate!)
+  def self.around(input, &block)
+    # input is the input object passed to call
+    return block.call unless input.respond_to?(:validate!)
 
-    context.validate!
+    input.validate!
     block.call
   rescue ActiveModel::ValidationError => e
     errors = e.model.errors.map do |error|
@@ -707,7 +707,7 @@ module InputValidation
 end
 
 module OutputValidation
-  def self.after(context, result)
+  def self.after(input, result)
     return unless result.success?
 
     output = result.value
