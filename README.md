@@ -696,6 +696,81 @@ class CreateUserUseCase < SenroUsecaser::Base
 end
 ```
 
+##### Input/Output Validation
+
+Use `extend_with` to integrate validation libraries like ActiveModel::Validations:
+
+```ruby
+# Define validation extension
+module InputValidation
+  def self.around(context, &block)
+    input = context.values.first  # Get input object
+
+    if input.respond_to?(:validate!)
+      begin
+        input.validate!
+        block.call
+      rescue ActiveModel::ValidationError => e
+        errors = e.model.errors.map do |error|
+          SenroUsecaser::Error.new(
+            code: :validation_error,
+            field: error.attribute,
+            message: error.full_message
+          )
+        end
+        SenroUsecaser::Result.failure(*errors)
+      end
+    else
+      block.call
+    end
+  end
+end
+
+module OutputValidation
+  def self.after(context, result)
+    return unless result.success?
+
+    output = result.value
+    if output.respond_to?(:validate!)
+      output.validate!
+    end
+  rescue ActiveModel::ValidationError => e
+    Rails.logger.error("Output validation failed: #{e.message}")
+  end
+end
+
+# Input class with ActiveModel validations
+class CreateUserInput
+  include ActiveModel::Validations
+
+  attr_accessor :name, :email
+
+  validates :name, presence: true, length: { minimum: 2 }
+  validates :email, presence: true, format: { with: URI::MailTo::EMAIL_REGEXP }
+
+  def initialize(name:, email:)
+    @name = name
+    @email = email
+  end
+end
+
+# Apply validation to UseCase
+class CreateUserUseCase < SenroUsecaser::Base
+  extend_with InputValidation, OutputValidation
+
+  input CreateUserInput
+
+  def call(input)
+    User.create!(name: input.name, email: input.email)
+  end
+end
+
+# Validation errors are returned as Result.failure
+result = CreateUserUseCase.call(CreateUserInput.new(name: "", email: "invalid"))
+result.failure?  # => true
+result.errors.first.field  # => :name
+```
+
 #### Combining Composition Patterns
 
 ```ruby
