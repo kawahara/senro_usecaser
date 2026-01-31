@@ -8,6 +8,7 @@ require_relative "senro_usecaser/result"
 require_relative "senro_usecaser/container"
 require_relative "senro_usecaser/configuration"
 require_relative "senro_usecaser/provider"
+require_relative "senro_usecaser/hook"
 require_relative "senro_usecaser/base"
 
 # SenroUsecaser is a type-safe UseCase pattern implementation library for Ruby.

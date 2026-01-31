@@ -1171,7 +1171,7 @@ RSpec.describe SenroUsecaser::Base do
 
         use_case = Class.new(described_class) do
           input input_class
-          around do |_ctx, &block|
+          around do |_ctx, _use_case, &block|
             call_order << :around_before
             result = block.call
             call_order << :around_after
@@ -1194,7 +1194,7 @@ RSpec.describe SenroUsecaser::Base do
 
         use_case = Class.new(described_class) do
           input input_class
-          around do |_ctx, &block|
+          around do |_ctx, _use_case, &block|
             result = block.call
             SenroUsecaser::Result.success("#{result.value}_modified")
           end
@@ -1215,7 +1215,7 @@ RSpec.describe SenroUsecaser::Base do
 
         use_case = Class.new(described_class) do
           input input_class
-          around do |_ctx, &_block|
+          around do |_ctx, _use_case, &_block|
             SenroUsecaser::Result.failure(SenroUsecaser::Error.new(code: :blocked, message: "Blocked"))
           end
 
@@ -1241,7 +1241,7 @@ RSpec.describe SenroUsecaser::Base do
           input input_class
           before { call_order << :before }
 
-          around do |_ctx, &block|
+          around do |_ctx, _use_case, &block|
             call_order << :around_before
             result = block.call
             call_order << :around_after
@@ -1259,6 +1259,90 @@ RSpec.describe SenroUsecaser::Base do
         use_case.call(hook_input.new(value: "test"))
 
         expect(call_order).to eq(%i[before around_before call around_after after])
+      end
+    end
+
+    describe "block hooks accessing dependencies" do
+      let(:container) { SenroUsecaser::Container.new }
+      let(:logger) { Object.new }
+
+      before do
+        container.register(:logger, logger)
+        SenroUsecaser.instance_variable_set(:@container, container)
+      end
+
+      after do
+        SenroUsecaser.reset!
+      end
+
+      it "before hook can access depends_on via instance_exec" do
+        accessed_logger = nil
+        input_class = hook_input
+        lgr = logger
+
+        use_case = Class.new(described_class) do
+          depends_on :logger
+          input input_class
+
+          before do |_input|
+            accessed_logger = logger
+          end
+
+          def call(input)
+            success(input.value)
+          end
+        end
+
+        use_case.call(hook_input.new(value: "test"))
+
+        expect(accessed_logger).to eq(lgr)
+      end
+
+      it "after hook can access depends_on via instance_exec" do
+        accessed_logger = nil
+        input_class = hook_input
+        lgr = logger
+
+        use_case = Class.new(described_class) do
+          depends_on :logger
+          input input_class
+
+          after do |_input, _result|
+            accessed_logger = logger
+          end
+
+          def call(input)
+            success(input.value)
+          end
+        end
+
+        use_case.call(hook_input.new(value: "test"))
+
+        expect(accessed_logger).to eq(lgr)
+      end
+
+      it "around hook can access depends_on via use_case argument" do
+        accessed_logger = nil
+        input_class = hook_input
+        lgr = logger
+
+        use_case = Class.new(described_class) do
+          depends_on :logger
+          input input_class
+
+          around do |_input, uc, &block|
+            accessed_logger = uc.send(:logger)
+            block.call
+          end
+
+          def call(input)
+            success(input.value)
+          end
+        end
+
+        use_case.call(hook_input.new(value: "test"))
+
+        expect(accessed_logger).to eq(lgr)
       end
     end
 
@@ -1600,7 +1684,7 @@ RSpec.describe SenroUsecaser::Base do
 
         use_case = Class.new(described_class) do
           input input_class
-          around do |_ctx, &block|
+          around do |_ctx, _use_case, &block|
             result = block.call
             if result.success?
               SenroUsecaser::Result.success(result.value + 100)

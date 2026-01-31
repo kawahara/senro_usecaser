@@ -659,24 +659,105 @@ end
 
 ##### Block Syntax
 
+Block hooks are executed in the UseCase instance context, allowing access to `depends_on` dependencies.
+
 ```ruby
 class CreateUserUseCase < SenroUsecaser::Base
+  depends_on :logger
+  depends_on :metrics
+  input Input
+
+  # before/after blocks can access dependencies directly
   before do |input|
-    # runs before call
+    logger.info("Starting with #{input.class.name}")
   end
 
   after do |input, result|
-    # runs after call
+    logger.info("Finished: #{result.success? ? 'success' : 'failure'}")
+    metrics.increment(:use_case_completed)
   end
 
-  around do |input, &block|
-    ActiveRecord::Base.transaction do
-      block.call
-    end
+  # around block receives use_case as second argument for dependency access
+  around do |input, use_case, &block|
+    use_case.logger.info("Transaction start")
+    result = ActiveRecord::Base.transaction { block.call }
+    use_case.logger.info("Transaction end")
+    result
   end
 
   def call(input)
     # main logic
+  end
+end
+```
+
+##### Hook Classes
+
+For more complex hooks with their own dependencies, use `SenroUsecaser::Hook` class:
+
+```ruby
+class LoggingHook < SenroUsecaser::Hook
+  depends_on :logger
+  depends_on :metrics
+
+  def before(input)
+    logger.info("Starting with #{input.class.name}")
+  end
+
+  def after(input, result)
+    logger.info("Finished: #{result.success? ? 'success' : 'failure'}")
+    metrics.increment(:use_case_completed)
+  end
+
+  def around(input)
+    logger.info("Around start")
+    result = yield
+    logger.info("Around end")
+    result
+  end
+end
+
+class CreateUserUseCase < SenroUsecaser::Base
+  extend_with LoggingHook
+
+  def call(input)
+    # main logic
+  end
+end
+```
+
+Hook classes support:
+- `depends_on` for dependency injection
+- `namespace` for scoped dependency resolution
+- Automatic namespace inference from module structure (when `infer_namespace_from_module` is enabled)
+- Inheriting namespace from the UseCase if not explicitly declared
+
+```ruby
+# Hook with explicit namespace
+class Admin::AuditHook < SenroUsecaser::Hook
+  namespace :admin
+  depends_on :audit_logger
+
+  def after(input, result)
+    audit_logger.log(action: "create", success: result.success?)
+  end
+end
+
+# Hook inheriting namespace from UseCase
+class MetricsHook < SenroUsecaser::Hook
+  depends_on :metrics  # resolved from UseCase's namespace
+
+  def after(input, result)
+    metrics.increment(:completed)
+  end
+end
+
+class Admin::CreateUserUseCase < SenroUsecaser::Base
+  namespace :admin
+  extend_with MetricsHook  # metrics resolved from :admin namespace
+
+  def call(input)
+    # ...
   end
 end
 ```

@@ -262,8 +262,9 @@ module SenroUsecaser
       end
 
       # Adds an around hook
+      # Block receives (input, use_case, &block) where use_case allows access to dependencies
       #
-      #: () { (untyped) { () -> Result[untyped] } -> Result[untyped] } -> void
+      #: () { (untyped, Base) { () -> Result[untyped] } -> Result[untyped] } -> void
       def around(&block)
         around_hooks << block if block
       end
@@ -440,22 +441,39 @@ module SenroUsecaser
     #: (untyped, Proc) -> Proc
     def build_around_chain(input, core_block)
       wrapped_core = -> { wrap_result(core_block.call) }
-      all_around_hooks = collect_around_hooks
+      chain = wrap_extension_around_hooks(input, wrapped_core)
+      wrap_block_around_hooks(input, chain)
+    end
 
-      all_around_hooks.reverse.reduce(wrapped_core) do |inner, hook|
+    # Wraps extension/module around hooks
+    #
+    #: (untyped, Proc) -> Proc
+    def wrap_extension_around_hooks(input, chain)
+      collect_extension_around_hooks.reverse.reduce(chain) do |inner, hook|
         -> { wrap_result(hook.call(input) { inner.call }) }
       end
     end
 
-    # Collects all around hooks from extensions and block-based hooks
+    # Wraps block-based around hooks (pass self as second argument)
+    #
+    #: (untyped, Proc) -> Proc
+    def wrap_block_around_hooks(input, chain)
+      use_case_instance = self
+      self.class.around_hooks.reverse.reduce(chain) do |inner, hook|
+        -> { wrap_result(hook.call(input, use_case_instance) { inner.call }) }
+      end
+    end
+
+    # Collects around hooks from Hook classes and extension modules (not block-based)
     #
     #: () -> Array[Proc]
-    def collect_around_hooks
-      hooks = [] #: Array[Proc]
+    def collect_extension_around_hooks
+      hooks = hook_instances.map { |hook_instance| hook_instance.method(:around).to_proc }
       self.class.extensions.each do |ext|
+        next if hook_class?(ext)
+
         hooks << ext.method(:around).to_proc if ext.respond_to?(:around)
       end
-      hooks.concat(self.class.around_hooks)
       hooks
     end
 
@@ -463,20 +481,49 @@ module SenroUsecaser
     #
     #: (untyped) -> void
     def run_before_hooks(input)
+      hook_instances.each do |hook_instance|
+        hook_instance.before(input)
+      end
       self.class.extensions.each do |ext|
+        next if hook_class?(ext)
+
         ext.send(:before, input) if ext.respond_to?(:before)
       end
-      self.class.before_hooks.each { |hook| hook.call(input) }
+      self.class.before_hooks.each { |hook| instance_exec(input, &hook) } # steep:ignore BlockTypeMismatch
     end
 
     # Runs all after hooks
     #
     #: (untyped, Result[untyped]) -> void
     def run_after_hooks(input, result)
+      hook_instances.each do |hook_instance|
+        hook_instance.after(input, result)
+      end
       self.class.extensions.each do |ext|
+        next if hook_class?(ext)
+
         ext.send(:after, input, result) if ext.respond_to?(:after)
       end
-      self.class.after_hooks.each { |hook| hook.call(input, result) }
+      self.class.after_hooks.each { |hook| instance_exec(input, result, &hook) } # steep:ignore BlockTypeMismatch
+    end
+
+    # Returns instantiated hook objects
+    #
+    #: () -> Array[Hook]
+    def hook_instances
+      @hook_instances ||= self.class.extensions.filter_map do |ext|
+        next unless hook_class?(ext)
+
+        hook_class = ext #: singleton(Hook)
+        hook_class.new(container: @_container, use_case_namespace: effective_namespace)
+      end
+    end
+
+    # Checks if the extension is a Hook class
+    #
+    #: (untyped) -> bool
+    def hook_class?(ext)
+      ext.is_a?(Class) && ext < Hook
     end
 
     # Resolves dependencies from the container

@@ -178,8 +178,9 @@ module SenroUsecaser
     def self.after_hooks: () -> Array[Proc]
 
     # Adds an around hook
+    # Block receives (input, use_case, &block) where use_case allows access to dependencies
     #
-    # : () { (untyped) { () -> Result[untyped] } -> Result[untyped] } -> void
+    # : () { (untyped, Base) { () -> Result[untyped] } -> Result[untyped] } -> void
     def self.around: () ?{ (?) -> untyped } -> untyped
 
     # Returns the list of around hooks
@@ -281,10 +282,20 @@ module SenroUsecaser
     # : (untyped, Proc) -> Proc
     def build_around_chain: (untyped, Proc) -> Proc
 
-    # Collects all around hooks from extensions and block-based hooks
+    # Wraps extension/module around hooks
+    #
+    # : (untyped, Proc) -> Proc
+    def wrap_extension_around_hooks: (untyped, Proc) -> Proc
+
+    # Wraps block-based around hooks (pass self as second argument)
+    #
+    # : (untyped, Proc) -> Proc
+    def wrap_block_around_hooks: (untyped, Proc) -> Proc
+
+    # Collects around hooks from Hook classes and extension modules (not block-based)
     #
     # : () -> Array[Proc]
-    def collect_around_hooks: () -> Array[Proc]
+    def collect_extension_around_hooks: () -> Array[Proc]
 
     # Runs all before hooks
     #
@@ -295,6 +306,16 @@ module SenroUsecaser
     #
     # : (untyped, Result[untyped]) -> void
     def run_after_hooks: (untyped, Result[untyped]) -> void
+
+    # Returns instantiated hook objects
+    #
+    # : () -> Array[Hook]
+    def hook_instances: () -> Array[Hook]
+
+    # Checks if the extension is a Hook class
+    #
+    # : (untyped) -> bool
+    def hook_class?: (untyped) -> bool
 
     # Resolves dependencies from the container
     #

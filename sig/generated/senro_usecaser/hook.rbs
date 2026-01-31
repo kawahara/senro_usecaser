@@ -1,0 +1,112 @@
+# Generated from lib/senro_usecaser/hook.rb with RBS::Inline
+
+module SenroUsecaser
+  # Base class for hooks with dependency injection support
+  #
+  # Hook classes provide a way to define before/after/around hooks
+  # with access to the DI container and automatic dependency resolution.
+  #
+  # @example Basic hook
+  #   class LoggingHook < SenroUsecaser::Hook
+  #     depends_on :logger, Logger
+  #
+  #     def before(input)
+  #       logger.info("Starting with #{input.class.name}")
+  #     end
+  #
+  #     def after(input, result)
+  #       logger.info("Finished: #{result.success? ? 'success' : 'failure'}")
+  #     end
+  #   end
+  #
+  # @example Hook with namespace
+  #   class Admin::AuditHook < SenroUsecaser::Hook
+  #     namespace :admin
+  #     depends_on :audit_logger, AuditLogger
+  #
+  #     def after(input, result)
+  #       audit_logger.log(input: input, result: result)
+  #     end
+  #   end
+  #
+  # @example Hook with around
+  #   class TransactionHook < SenroUsecaser::Hook
+  #     def around(input)
+  #       ActiveRecord::Base.transaction { yield }
+  #     end
+  #   end
+  class Hook
+    # Declares a dependency to be injected from the container
+    #
+    # : (Symbol, ?Class) -> void
+    def self.depends_on: (Symbol, ?Class) -> void
+
+    # Returns the list of declared dependencies
+    #
+    # : () -> Array[Symbol]
+    def self.dependencies: () -> Array[Symbol]
+
+    # Returns the dependency type mapping
+    #
+    # : () -> Hash[Symbol, Class]
+    def self.dependency_types: () -> Hash[Symbol, Class]
+
+    # Sets or returns the namespace for dependency resolution
+    #
+    # : (?(Symbol | String)) -> (Symbol | String)?
+    def self.namespace: (?Symbol | String) -> (Symbol | String)?
+
+    # Alias for namespace() without arguments
+    #
+    # : () -> (Symbol | String)?
+    def self.hook_namespace: () -> (Symbol | String)?
+
+    # @api private
+    def self.inherited: (untyped subclass) -> untyped
+
+    # Initializes the hook with dependencies resolved from the container
+    #
+    # : (container: Container, ?use_case_namespace: (Symbol | String)?) -> void
+    def initialize: (container: Container, ?use_case_namespace: (Symbol | String)?) -> void
+
+    # Called before the UseCase executes
+    # Override in subclass to add before logic
+    #
+    # : (untyped) -> void
+    def before: (untyped) -> void
+
+    # Called after the UseCase executes
+    # Override in subclass to add after logic
+    #
+    # : (untyped, Result[untyped]) -> void
+    def after: (untyped, Result[untyped]) -> void
+
+    # Wraps the UseCase execution
+    # Override in subclass to add around logic
+    #
+    # : (untyped) { () -> Result[untyped] } -> Result[untyped]
+    def around: (untyped) { () -> Result[untyped] } -> Result[untyped]
+
+    private
+
+    # Returns the effective namespace for dependency resolution
+    #
+    # : () -> (Symbol | String)?
+    def effective_namespace: () -> (Symbol | String)?
+
+    # Infers namespace from the class's module structure
+    #
+    # : () -> String?
+    def infer_namespace_from_class: () -> String?
+
+    # Resolves dependencies from the container
+    #
+    # : () -> void
+    def resolve_dependencies: () -> void
+
+    # Resolves a single dependency from the container
+    #
+    # : (Symbol) -> untyped
+    def resolve_from_container: (Symbol) -> untyped
+  end
+end
