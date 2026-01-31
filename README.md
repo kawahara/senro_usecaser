@@ -1005,3 +1005,12 @@ To install this gem onto your local machine, run `bundle exec rake install`. To 
 ## Contributing
 
 Bug reports and pull requests are welcome on GitHub at https://github.com/[USERNAME]/senro_usecaser.
+
+## Roadmap
+
+The following features are planned for future releases:
+
+- **Parallel execution in organize** - Execute multiple steps concurrently within a pipeline for improved performance
+- **Ruby LSP extension for Container** - IDE autocompletion support for dependency injection with Container
+- **Automatic RBS generation** - Auto-generate RBS type definitions for `input`, `output`, `call`, and `depends_on` declarations
+- **Input/Output validation** - Built-in validation mechanism for input and output objects
