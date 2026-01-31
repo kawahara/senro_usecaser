@@ -62,8 +62,8 @@ module SenroUsecaser
     #     enabled_if { Rails.env.development? }
     #   end
     #
-    # : () { () -> bool } -> void
-    def self.enabled_if: () { () -> bool } -> void
+    # : () { () -> boolish } -> void
+    def self.enabled_if: () { () -> boolish } -> void
 
     # Returns whether this provider is enabled
     #

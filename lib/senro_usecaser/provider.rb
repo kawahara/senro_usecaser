@@ -72,7 +72,7 @@ module SenroUsecaser
       #     enabled_if { Rails.env.development? }
       #   end
       #
-      #: () { () -> bool } -> void
+      #: () { () -> boolish } -> void
       def enabled_if(&block)
         @enabled_condition = block
       end
