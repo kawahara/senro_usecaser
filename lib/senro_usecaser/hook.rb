@@ -38,57 +38,18 @@ module SenroUsecaser
   #     end
   #   end
   class Hook
+    extend DependsOn
+
     class << self
-      # Declares a dependency to be injected from the container
-      #
-      #: (Symbol, ?Class) -> void
-      def depends_on(name, type = nil)
-        dependencies << name unless dependencies.include?(name)
-        dependency_types[name] = type if type
-
-        define_method(name) do
-          @_dependencies[name]
-        end
-      end
-
-      # Returns the list of declared dependencies
-      #
-      #: () -> Array[Symbol]
-      def dependencies
-        @dependencies ||= []
-      end
-
-      # Returns the dependency type mapping
-      #
-      #: () -> Hash[Symbol, Class]
-      def dependency_types
-        @dependency_types ||= {}
-      end
-
-      # Sets or returns the namespace for dependency resolution
-      #
-      #: (?(Symbol | String)) -> (Symbol | String)?
-      def namespace(name = nil)
-        if name
-          @hook_namespace = name
-        else
-          @hook_namespace
-        end
-      end
-
-      # Alias for namespace() without arguments
+      # Alias for backward compatibility
       #
       #: () -> (Symbol | String)?
-      def hook_namespace # rubocop:disable Style/TrivialAccessors
-        @hook_namespace
-      end
+      alias hook_namespace declared_namespace
 
       # @api private
       def inherited(subclass)
         super
-        subclass.instance_variable_set(:@dependencies, dependencies.dup)
-        subclass.instance_variable_set(:@dependency_types, dependency_types.dup)
-        subclass.instance_variable_set(:@hook_namespace, @hook_namespace)
+        copy_depends_on_to(subclass)
       end
     end
 
@@ -150,51 +111,16 @@ module SenroUsecaser
     private
 
     # Returns the effective namespace for dependency resolution
+    # Overrides DependsOn::InstanceMethods to add use_case_namespace fallback
     #
     #: () -> (Symbol | String)?
     def effective_namespace
-      return self.class.hook_namespace if self.class.hook_namespace
+      declared = self.class.declared_namespace
+      return declared if declared
       return @_use_case_namespace if @_use_case_namespace
       return nil unless SenroUsecaser.configuration.infer_namespace_from_module
 
       infer_namespace_from_class
-    end
-
-    # Infers namespace from the class's module structure
-    #
-    #: () -> String?
-    def infer_namespace_from_class
-      class_name = self.class.name
-      return nil unless class_name
-
-      parts = class_name.split("::")
-      return nil if parts.length <= 1
-
-      module_parts = parts[0...-1] || [] #: Array[String]
-      return nil if module_parts.empty?
-
-      module_parts.map { |part| part.gsub(/([a-z])([A-Z])/, '\1_\2').downcase }.join("::")
-    end
-
-    # Resolves dependencies from the container
-    #
-    #: () -> void
-    def resolve_dependencies
-      self.class.dependencies.each do |name|
-        @_dependencies[name] = resolve_from_container(name)
-      end
-    end
-
-    # Resolves a single dependency from the container
-    #
-    #: (Symbol) -> untyped
-    def resolve_from_container(name)
-      namespace = effective_namespace
-      if namespace
-        @_container.resolve_in(namespace, name)
-      else
-        @_container.resolve(name)
-      end
     end
   end
 end

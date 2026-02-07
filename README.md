@@ -935,6 +935,657 @@ class Admin::CreateUserUseCase < SenroUsecaser::Base
 end
 ```
 
+##### Using DependsOn in Custom Classes
+
+The `SenroUsecaser::DependsOn` module can be used in any class to enable the same dependency injection features available in UseCase and Hook classes. This is useful for services, repositories, or other application components that need DI support.
+
+**Basic Usage (No initialize needed)**
+
+When you extend `DependsOn`, a default `initialize(container:)` is provided automatically:
+
+```ruby
+class OrderService
+  extend SenroUsecaser::DependsOn
+
+  depends_on :order_repository, OrderRepository
+  depends_on :payment_gateway, PaymentGateway
+  depends_on :logger, Logger
+
+  # No initialize needed! Default is provided automatically.
+
+  def process_order(order_id)
+    order = order_repository.find(order_id)
+    logger.info("Processing order #{order_id}")
+    payment_gateway.charge(order.total)
+  end
+end
+
+# Usage
+service = OrderService.new(container: SenroUsecaser.container)
+service.process_order(123)
+```
+
+**Custom initialize with super**
+
+If you need additional parameters, define your own `initialize` and call `super`:
+
+```ruby
+class OrderService
+  extend SenroUsecaser::DependsOn
+
+  depends_on :order_repository, OrderRepository
+  attr_reader :default_currency
+
+  def initialize(container:, default_currency: "JPY")
+    super(container: container)  # Handles dependency resolution
+    @default_currency = default_currency
+  end
+
+  def process_order(order_id)
+    order = order_repository.find(order_id)
+    order.charge(currency: default_currency)
+  end
+end
+
+service = OrderService.new(container: SenroUsecaser.container, default_currency: "USD")
+service.default_currency  # => "USD"
+service.order_repository  # => OrderRepository instance
+```
+
+**With Namespace**
+
+```ruby
+class Admin::ReportService
+  extend SenroUsecaser::DependsOn
+
+  namespace :admin
+  depends_on :report_generator, ReportGenerator
+  depends_on :logger, Logger  # Falls back to root namespace
+
+  # No initialize needed!
+
+  def generate_monthly_report
+    logger.info("Generating monthly report")
+    report_generator.generate(:monthly)
+  end
+end
+```
+
+**With Automatic Namespace Inference**
+
+When `infer_namespace_from_module` is enabled, the namespace is automatically derived from the module structure:
+
+```ruby
+SenroUsecaser.configure do |config|
+  config.infer_namespace_from_module = true
+end
+
+module Admin
+  module Reports
+    class ExportService
+      extend SenroUsecaser::DependsOn
+
+      # No explicit namespace needed!
+      # Automatically uses "admin::reports" namespace
+      depends_on :exporter, Exporter        # from admin::reports
+      depends_on :storage, Storage          # from admin (fallback)
+      depends_on :logger, Logger            # from root (fallback)
+
+      # No initialize needed!
+
+      def export(data)
+        result = exporter.export(data)
+        storage.save(result)
+        logger.info("Export completed")
+      end
+    end
+  end
+end
+```
+
+**Features provided by DependsOn:**
+
+- `depends_on :name, Type` - Declare dependencies with optional type hints
+- `namespace :name` - Set explicit namespace for dependency resolution
+- `declared_namespace` - Get the declared namespace
+- `dependencies` - List of declared dependency names
+- `dependency_types` - Hash of dependency name to type
+- `copy_depends_on_to(subclass)` - Copy configuration to subclasses (for inheritance)
+
+**Instance methods (via InstanceMethods module):**
+
+- `initialize(container:)` - Default initialize that sets up dependency injection
+- `resolve_dependencies` - Resolve all declared dependencies from the container
+- `effective_namespace` - Get the namespace used for resolution (declared or inferred)
+
+**Custom initialize (full override):**
+
+If you need complete control, you can manually set up the required instance variables:
+
+```ruby
+def initialize(container:, extra:)
+  @_container = container
+  @_dependencies = {}
+  @extra = extra
+  resolve_dependencies
+end
+```
+
+##### on_failure Hook
+
+The `on_failure` hook is called only when the UseCase execution results in a failure. Unlike `after` which is always called, `on_failure` provides a dedicated hook for error handling, logging, or recovery logic.
+
+**Block Syntax**
+
+```ruby
+class CreateUserUseCase < SenroUsecaser::Base
+  depends_on :logger
+  depends_on :error_notifier
+  input Input
+
+  # on_failure block is executed in UseCase instance context
+  # allowing access to dependencies
+  on_failure do |input, result|
+    logger.error("Failed to create user: #{result.errors.map(&:message).join(', ')}")
+    error_notifier.notify(
+      action: "create_user",
+      input: input,
+      errors: result.errors
+    )
+  end
+
+  def call(input)
+    user = User.create!(name: input.name, email: input.email)
+    success(user)
+  rescue ActiveRecord::RecordInvalid => e
+    failure(Error.new(code: :validation_error, message: e.message))
+  end
+end
+```
+
+**Module Syntax (with extend_with)**
+
+```ruby
+module ErrorLogging
+  def self.on_failure(input, result)
+    Rails.logger.error("UseCase failed: #{result.errors.first&.message}")
+  end
+end
+
+class CreateUserUseCase < SenroUsecaser::Base
+  extend_with ErrorLogging
+
+  def call(input)
+    # ...
+  end
+end
+```
+
+**Hook Class Syntax**
+
+```ruby
+class ErrorNotificationHook < SenroUsecaser::Hook
+  depends_on :error_notifier
+  depends_on :logger
+
+  def on_failure(input, result)
+    logger.error("UseCase failed with #{result.errors.size} error(s)")
+    error_notifier.notify(
+      errors: result.errors,
+      input_class: input.class.name,
+      timestamp: Time.current
+    )
+  end
+end
+
+class CreateUserUseCase < SenroUsecaser::Base
+  extend_with ErrorNotificationHook
+
+  def call(input)
+    # ...
+  end
+end
+```
+
+**Execution Order**
+
+When a UseCase fails, hooks are executed in the following order:
+
+1. `around` hooks (unwinding)
+2. `after` hooks (always called, regardless of success/failure)
+3. `on_failure` hooks (only called when `result.failure?` is true)
+
+```ruby
+class CreateUserUseCase < SenroUsecaser::Base
+  after do |input, result|
+    puts "after: #{result.success? ? 'success' : 'failure'}"
+  end
+
+  on_failure do |input, result|
+    puts "on_failure: handling error..."
+  end
+
+  def call(input)
+    failure(Error.new(code: :error, message: "Something went wrong"))
+  end
+end
+
+# Output:
+# after: failure
+# on_failure: handling error...
+```
+
+**Use Cases for on_failure**
+
+- **Error logging**: Log detailed error information for debugging
+- **Error notification**: Send alerts to monitoring systems (Sentry, Bugsnag, etc.)
+- **Cleanup operations**: Rollback partial state changes on failure
+- **Retry preparation**: Queue failed operations for retry
+- **Metrics**: Increment failure counters for observability
+
+##### on_failure in Pipelines (Rollback Behavior)
+
+When using `organize` pipelines, the `on_failure` hook provides **rollback behavior**. If a step fails, the `on_failure` hooks of all previously successful steps are executed in **reverse order**.
+
+This enables compensation logic (Saga pattern) where each step can define how to undo its changes when a later step fails.
+
+```ruby
+class CreateOrderUseCase < SenroUsecaser::Base
+  input Input
+
+  on_failure do |input, result|
+    # Called if a later step fails
+    Order.find_by(id: input.order_id)&.destroy
+    puts "Rolled back: order creation"
+  end
+
+  def call(input)
+    order = Order.create!(user_id: input.user_id)
+    success(Output.new(order_id: order.id, user_id: input.user_id))
+  end
+end
+
+class ReserveInventoryUseCase < SenroUsecaser::Base
+  input Input
+
+  on_failure do |input, result|
+    # Called if a later step fails
+    Inventory.release(order_id: input.order_id)
+    puts "Rolled back: inventory reservation"
+  end
+
+  def call(input)
+    Inventory.reserve(order_id: input.order_id)
+    success(input)
+  end
+end
+
+class ChargePaymentUseCase < SenroUsecaser::Base
+  input Input
+
+  on_failure do |input, result|
+    # Called when this step itself fails (no rollback needed for self)
+    puts "Payment failed: #{result.errors.first&.message}"
+  end
+
+  def call(input)
+    # Payment fails
+    failure(Error.new(code: :payment_failed, message: "Insufficient funds"))
+  end
+end
+
+class PlaceOrderUseCase < SenroUsecaser::Base
+  input Input
+
+  organize do
+    step CreateOrderUseCase       # Step 1: Success
+    step ReserveInventoryUseCase  # Step 2: Success
+    step ChargePaymentUseCase     # Step 3: Failure!
+  end
+end
+
+result = PlaceOrderUseCase.call(input)
+# Output (in order):
+# Payment failed: Insufficient funds       <- ChargePaymentUseCase.on_failure
+# Rolled back: inventory reservation       <- ReserveInventoryUseCase.on_failure
+# Rolled back: order creation              <- CreateOrderUseCase.on_failure
+```
+
+**Execution Flow on Pipeline Failure:**
+
+```
+Step A (success) → Step B (success) → Step C (failure)
+                                           ↓
+                                    C.on_failure (failed step)
+                                           ↓
+                                    B.on_failure (rollback)
+                                           ↓
+                                    A.on_failure (rollback)
+```
+
+**Important Notes:**
+
+1. **Reverse order**: `on_failure` hooks are called in reverse order of successful execution, ensuring proper cleanup sequence.
+
+2. **Input context**: Each step's `on_failure` receives the input that was passed to that specific step (the output of the previous step), not the original pipeline input.
+
+3. **Failed step included**: The step that failed also has its `on_failure` called (first, before rollback of previous steps).
+
+4. **on_failure: :continue steps**: Steps marked with `on_failure: :continue` that fail will have their `on_failure` hook called, but won't trigger rollback of previous steps since the pipeline continues.
+
+5. **Independent of on_failure_strategy**: The rollback behavior works consistently with `:stop`, `:continue`, and `:collect` strategies. For `:collect`, rollback occurs after all steps have been attempted.
+
+```ruby
+class PlaceOrderUseCase < SenroUsecaser::Base
+  organize do
+    step CreateOrderUseCase
+    step SendNotificationUseCase, on_failure: :continue  # Optional step
+    step ChargePaymentUseCase
+  end
+end
+
+# If SendNotificationUseCase fails:
+# - SendNotificationUseCase.on_failure is called
+# - Pipeline continues (no rollback of CreateOrderUseCase)
+# - ChargePaymentUseCase executes
+
+# If ChargePaymentUseCase fails:
+# - ChargePaymentUseCase.on_failure is called
+# - CreateOrderUseCase.on_failure is called (rollback)
+# - SendNotificationUseCase.on_failure is NOT called (it was optional and didn't cause the failure)
+```
+
+##### Retry on Failure
+
+SenroUsecaser provides retry functionality similar to ActiveJob, allowing automatic retry of failed UseCases with configurable strategies.
+
+###### Basic Retry Configuration
+
+Use `retry_on` to configure automatic retry for specific error codes or exception types:
+
+```ruby
+class FetchExternalDataUseCase < SenroUsecaser::Base
+  input Input
+
+  # Retry up to 3 times for specific error codes
+  retry_on :network_error, :timeout_error, attempts: 3
+
+  # Retry on specific exception types
+  retry_on NetworkError, Timeout::Error, attempts: 5, wait: 1.second
+
+  def call(input)
+    response = ExternalAPI.fetch(input.url)
+    success(response)
+  rescue Timeout::Error => e
+    failure(Error.new(code: :timeout_error, message: e.message, cause: e))
+  end
+end
+```
+
+###### Retry Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `attempts` | Maximum number of retry attempts | 3 |
+| `wait` | Time to wait between retries (seconds or Duration) | 0 |
+| `backoff` | Backoff strategy (`:fixed`, `:linear`, `:exponential`) | `:fixed` |
+| `max_wait` | Maximum wait time when using backoff | 1 hour |
+| `jitter` | Add randomness to wait time (0.0 to 1.0) | 0 |
+
+```ruby
+class ProcessPaymentUseCase < SenroUsecaser::Base
+  input Input
+
+  # Exponential backoff: 1s, 2s, 4s, 8s... (capped at 30s)
+  retry_on :gateway_error,
+           attempts: 5,
+           wait: 1.second,
+           backoff: :exponential,
+           max_wait: 30.seconds
+
+  # Linear backoff with jitter: 2s, 4s, 6s... (±20% randomness)
+  retry_on :rate_limited,
+           attempts: 10,
+           wait: 2.seconds,
+           backoff: :linear,
+           jitter: 0.2
+
+  def call(input)
+    PaymentGateway.charge(input.amount)
+  end
+end
+```
+
+###### Backoff Strategies Explained
+
+The `backoff` option controls how wait time increases between retry attempts:
+
+**`:fixed` (default)** - Same wait time for every retry.
+
+```
+wait: 2s
+  Attempt 1 fails → wait 2s → Attempt 2
+  Attempt 2 fails → wait 2s → Attempt 3
+  Attempt 3 fails → wait 2s → Attempt 4
+```
+
+Best for: Temporary errors expected to recover quickly.
+
+**`:linear`** - Wait time increases by a fixed amount each retry.
+
+```
+wait: 2s (formula: wait × attempt)
+  Attempt 1 fails → wait 2s  → Attempt 2
+  Attempt 2 fails → wait 4s  → Attempt 3
+  Attempt 3 fails → wait 6s  → Attempt 4
+  Attempt 4 fails → wait 8s  → Attempt 5
+```
+
+Best for: Load-related errors where gradual recovery is expected.
+
+**`:exponential`** - Wait time doubles each retry (most aggressive backoff).
+
+```
+wait: 2s (formula: wait × 2^(attempt-1))
+  Attempt 1 fails → wait 2s  → Attempt 2
+  Attempt 2 fails → wait 4s  → Attempt 3
+  Attempt 3 fails → wait 8s  → Attempt 4
+  Attempt 4 fails → wait 16s → Attempt 5
+```
+
+Best for: Rate limiting, server overload, external API throttling.
+
+**Summary:**
+
+| Strategy | Formula | Use Case |
+|----------|---------|----------|
+| `:fixed` | `wait` | Quick recovery expected |
+| `:linear` | `wait × attempt` | Gradual recovery expected |
+| `:exponential` | `wait × 2^(attempt-1)` | Rate limits, heavy load |
+
+**`max_wait`** caps the wait time to prevent excessive delays with `:exponential`:
+
+```ruby
+retry_on :api_error,
+         wait: 1.second,
+         backoff: :exponential,
+         max_wait: 30.seconds  # Never wait more than 30s
+
+# Without max_wait, attempt 10 would wait 512 seconds (8.5 minutes)!
+# With max_wait: 30s, it caps at 30 seconds
+```
+
+**`jitter`** adds randomness to prevent thundering herd problem when many processes retry simultaneously:
+
+```ruby
+retry_on :api_error,
+         wait: 2.seconds,
+         backoff: :exponential,
+         jitter: 0.25  # ±25% randomness
+
+# Attempt 2 wait: 4s ± 1s (3s to 5s)
+# Attempt 3 wait: 8s ± 2s (6s to 10s)
+```
+
+###### Manual Retry in on_failure
+
+For more control, use `retry!` within an `on_failure` block:
+
+```ruby
+class SendEmailUseCase < SenroUsecaser::Base
+  input Input
+
+  on_failure do |input, result, context|
+    if result.errors.any? { |e| e.code == :temporary_failure }
+      # Retry with same input
+      retry! if context.attempt < 3
+
+      # Or retry with modified input
+      retry!(input: ModifiedInput.new(input, fallback: true))
+
+      # Or retry after delay
+      retry!(wait: 5.seconds) if context.attempt < 5
+    end
+  end
+
+  def call(input)
+    Mailer.send(input.to, input.subject, input.body)
+  end
+end
+```
+
+###### Retry Context
+
+The `on_failure` block receives a `context` object with retry information:
+
+```ruby
+on_failure do |input, result, context|
+  context.attempt        # Current attempt number (1, 2, 3...)
+  context.max_attempts   # Maximum attempts configured (nil if unlimited)
+  context.retried?       # Whether this is a retry (attempt > 1)
+  context.elapsed_time   # Total time elapsed since first attempt
+  context.last_error     # The error from the previous attempt (if retried)
+end
+```
+
+###### Discard (Don't Retry)
+
+Use `discard_on` to skip retry for specific errors:
+
+```ruby
+class CreateUserUseCase < SenroUsecaser::Base
+  input Input
+
+  # Always retry on these
+  retry_on :database_error, attempts: 3
+
+  # Never retry on these (fail immediately)
+  discard_on :validation_error, :duplicate_record
+
+  def call(input)
+    User.create!(input.to_h)
+  end
+end
+```
+
+###### Callbacks for Retry Events
+
+```ruby
+class ProcessOrderUseCase < SenroUsecaser::Base
+  input Input
+
+  retry_on :payment_error, attempts: 3
+
+  # Called before each retry attempt
+  before_retry do |input, result, context|
+    logger.warn("Retrying attempt #{context.attempt + 1}...")
+  end
+
+  # Called when all retry attempts are exhausted
+  after_retries_exhausted do |input, result, context|
+    logger.error("All #{context.max_attempts} attempts failed")
+    ErrorNotifier.notify(result.errors, attempts: context.attempt)
+  end
+
+  def call(input)
+    # ...
+  end
+end
+```
+
+###### Retry in Pipelines
+
+When a step in a pipeline fails and retries, the behavior depends on the retry outcome:
+
+```ruby
+class PlaceOrderUseCase < SenroUsecaser::Base
+  organize do
+    step CreateOrderUseCase
+    step ChargePaymentUseCase    # Has retry_on :gateway_error, attempts: 3
+    step SendConfirmationUseCase
+  end
+end
+```
+
+**Retry succeeds**: Pipeline continues to the next step normally.
+
+```
+CreateOrder ✓ → ChargePayment ✗ → (retry) → ChargePayment ✓ → SendConfirmation ✓
+```
+
+**Retry exhausted**: Pipeline fails and rollback is triggered.
+
+```
+CreateOrder ✓ → ChargePayment ✗ → (retry x3) → ChargePayment ✗ (exhausted)
+                     ↓
+              ChargePayment.on_failure
+                     ↓
+              CreateOrder.on_failure (rollback)
+```
+
+###### Combining retry_on with on_failure
+
+`retry_on` is evaluated first. If retries are exhausted or the error is discarded, `on_failure` is called:
+
+```ruby
+class ProcessPaymentUseCase < SenroUsecaser::Base
+  input Input
+
+  retry_on :gateway_error, attempts: 3
+  discard_on :invalid_card
+
+  on_failure do |input, result, context|
+    if context.retried?
+      # All retries exhausted
+      logger.error("Payment failed after #{context.attempt} attempts")
+    else
+      # First failure (discarded or non-retryable error)
+      logger.error("Payment failed immediately: #{result.errors.first&.code}")
+    end
+  end
+
+  def call(input)
+    # ...
+  end
+end
+```
+
+###### Execution Flow with Retry
+
+```
+call(input)
+    ↓
+  failure ←──────────────────────────────┐
+    ↓                                    │
+  retry_on matches? ──yes──→ attempt < max?
+    ↓ no                         ↓ yes   │ no
+    ↓                    wait → retry ───┘
+    ↓                            ↓
+    └────────────────────────────┴──→ on_failure
+                                            ↓
+                                      (rollback if pipeline)
+```
+
 ##### Input/Output Validation
 
 Use `extend_with` to integrate validation libraries like ActiveModel::Validations:

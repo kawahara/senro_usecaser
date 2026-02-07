@@ -10,7 +10,6 @@ module SenroUsecaser
   class Base
     # Class methods that rbs-inline doesn't generate correctly
     def self.organized_steps: () -> Array[Step]?
-    def self.use_case_namespace: () -> (Symbol | String)?
     def self.output_schema: () -> (Class | Hash[Symbol, Class])?
   end
 end

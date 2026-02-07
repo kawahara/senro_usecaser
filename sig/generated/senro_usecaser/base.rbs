@@ -89,30 +89,14 @@ module SenroUsecaser
   #     organize StepA, StepB
   #   end
   class Base
-    # Declares a dependency to be injected from the container
-    #
-    # : (Symbol, ?Class) -> void
-    def self.depends_on: (Symbol, ?Class) -> void
+    extend DependsOn
 
-    # Returns the list of declared dependencies
-    #
-    # : () -> Array[Symbol]
-    def self.dependencies: () -> Array[Symbol]
+    include DependsOn::InstanceMethods
 
-    # Returns the dependency type mapping
-    #
-    # : () -> Hash[Symbol, Class]
-    def self.dependency_types: () -> Hash[Symbol, Class]
-
-    # Sets the namespace for dependency resolution
-    #
-    # : ((Symbol | String)) -> void
-    def self.namespace: (Symbol | String) -> void
-
-    # Returns the declared namespace
+    # Alias for backward compatibility
     #
     # : () -> (Symbol | String)?
-    attr_reader use_case_namespace: untyped
+    alias self.use_case_namespace self.declared_namespace
 
     # Declares a sequence of UseCases to execute as a pipeline
     #
@@ -471,19 +455,10 @@ module SenroUsecaser
     def resolve_dependencies: (Container, Hash[Symbol, untyped]) -> void
 
     # Resolves a single dependency from the container
+    # Overrides DependsOn::InstanceMethods to accept container as parameter
     #
     # : (Container, Symbol) -> untyped
     def resolve_from_container: (Container, Symbol) -> untyped
-
-    # Returns the effective namespace for dependency resolution
-    #
-    # : () -> (Symbol | String)?
-    def effective_namespace: () -> (Symbol | String)?
-
-    # Infers namespace from the class's module structure
-    #
-    # : () -> String?
-    def infer_namespace_from_class: () -> String?
 
     # Executes the organized UseCase pipeline
     #

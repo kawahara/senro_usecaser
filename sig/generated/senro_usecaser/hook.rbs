@@ -36,30 +36,14 @@ module SenroUsecaser
   #     end
   #   end
   class Hook
-    # Declares a dependency to be injected from the container
-    #
-    # : (Symbol, ?Class) -> void
-    def self.depends_on: (Symbol, ?Class) -> void
+    extend DependsOn
 
-    # Returns the list of declared dependencies
-    #
-    # : () -> Array[Symbol]
-    def self.dependencies: () -> Array[Symbol]
+    include DependsOn::InstanceMethods
 
-    # Returns the dependency type mapping
-    #
-    # : () -> Hash[Symbol, Class]
-    def self.dependency_types: () -> Hash[Symbol, Class]
-
-    # Sets or returns the namespace for dependency resolution
-    #
-    # : (?(Symbol | String)) -> (Symbol | String)?
-    def self.namespace: (?Symbol | String) -> (Symbol | String)?
-
-    # Alias for namespace() without arguments
+    # Alias for backward compatibility
     #
     # : () -> (Symbol | String)?
-    def self.hook_namespace: () -> (Symbol | String)?
+    alias self.hook_namespace self.declared_namespace
 
     # @api private
     def self.inherited: (untyped subclass) -> untyped
@@ -108,23 +92,9 @@ module SenroUsecaser
     private
 
     # Returns the effective namespace for dependency resolution
+    # Overrides DependsOn::InstanceMethods to add use_case_namespace fallback
     #
     # : () -> (Symbol | String)?
     def effective_namespace: () -> (Symbol | String)?
-
-    # Infers namespace from the class's module structure
-    #
-    # : () -> String?
-    def infer_namespace_from_class: () -> String?
-
-    # Resolves dependencies from the container
-    #
-    # : () -> void
-    def resolve_dependencies: () -> void
-
-    # Resolves a single dependency from the container
-    #
-    # : (Symbol) -> untyped
-    def resolve_from_container: (Symbol) -> untyped
   end
 end

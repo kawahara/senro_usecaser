@@ -121,44 +121,13 @@ module SenroUsecaser
   #     organize StepA, StepB
   #   end
   class Base
+    extend DependsOn
+
     class << self
-      # Declares a dependency to be injected from the container
-      #
-      #: (Symbol, ?Class) -> void
-      def depends_on(name, type = nil)
-        dependencies << name unless dependencies.include?(name)
-        dependency_types[name] = type if type
-
-        define_method(name) do
-          @_dependencies[name]
-        end
-      end
-
-      # Returns the list of declared dependencies
-      #
-      #: () -> Array[Symbol]
-      def dependencies
-        @dependencies ||= []
-      end
-
-      # Returns the dependency type mapping
-      #
-      #: () -> Hash[Symbol, Class]
-      def dependency_types
-        @dependency_types ||= {}
-      end
-
-      # Sets the namespace for dependency resolution
-      #
-      #: ((Symbol | String)) -> void
-      def namespace(name)
-        @use_case_namespace = name
-      end
-
-      # Returns the declared namespace
+      # Alias for backward compatibility
       #
       #: () -> (Symbol | String)?
-      attr_reader :use_case_namespace
+      alias use_case_namespace declared_namespace
 
       # Declares a sequence of UseCases to execute as a pipeline
       #
@@ -454,9 +423,7 @@ module SenroUsecaser
       private
 
       def copy_configuration_to(subclass)
-        subclass.instance_variable_set(:@dependencies, dependencies.dup)
-        subclass.instance_variable_set(:@dependency_types, dependency_types.dup)
-        subclass.instance_variable_set(:@use_case_namespace, @use_case_namespace)
+        copy_depends_on_to(subclass)
         subclass.instance_variable_set(:@organized_steps, @organized_steps&.dup)
         subclass.instance_variable_set(:@on_failure_strategy, @on_failure_strategy)
         subclass.instance_variable_set(:@input_types, @input_types&.dup)
@@ -831,41 +798,16 @@ module SenroUsecaser
     end
 
     # Resolves a single dependency from the container
+    # Overrides DependsOn::InstanceMethods to accept container as parameter
     #
     #: (Container, Symbol) -> untyped
     def resolve_from_container(container, name)
-      namespace = effective_namespace
-      if namespace
-        container.resolve_in(namespace, name)
+      ns = effective_namespace
+      if ns
+        container.resolve_in(ns, name)
       else
         container.resolve(name)
       end
-    end
-
-    # Returns the effective namespace for dependency resolution
-    #
-    #: () -> (Symbol | String)?
-    def effective_namespace
-      return self.class.use_case_namespace if self.class.use_case_namespace
-      return nil unless SenroUsecaser.configuration.infer_namespace_from_module
-
-      infer_namespace_from_class
-    end
-
-    # Infers namespace from the class's module structure
-    #
-    #: () -> String?
-    def infer_namespace_from_class
-      class_name = self.class.name
-      return nil unless class_name
-
-      parts = class_name.split("::")
-      return nil if parts.length <= 1
-
-      module_parts = parts[0...-1] || [] #: Array[String]
-      return nil if module_parts.empty?
-
-      module_parts.map { |part| part.gsub(/([a-z])([A-Z])/, '\1_\2').downcase }.join("::")
     end
 
     # Executes the organized UseCase pipeline
