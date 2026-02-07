@@ -327,12 +327,99 @@ class DevelopmentProvider < SenroUsecaser::Provider
 end
 
 # =============================================================================
+# パイプライン Input インターフェース
+# =============================================================================
+# パイプラインでは前のステップの Output が次のステップの Input になります。
+# 各ステップが期待する属性をインターフェースとして定義し、
+# `input InterfaceModule` で型チェックを行います。
+
+# 最初のステップ用（user_id, product_ids）
+module OrderRequestInput
+  #: () -> Integer
+  def user_id = raise NotImplementedError
+
+  #: () -> Array[Integer]
+  def product_ids = raise NotImplementedError
+end
+
+# ユーザー検証後（user, product_ids）
+module ValidatedUserInput
+  #: () -> User
+  def user = raise NotImplementedError
+
+  #: () -> Array[Integer]
+  def product_ids = raise NotImplementedError
+end
+
+# 商品検証後（user, items, subtotal）
+module ValidatedProductsInput
+  #: () -> User
+  def user = raise NotImplementedError
+
+  #: () -> Array[Product]
+  def items = raise NotImplementedError
+
+  #: () -> Integer
+  def subtotal = raise NotImplementedError
+end
+
+# 税計算後（user, items, subtotal, tax）
+module TaxCalculatedInput
+  #: () -> User
+  def user = raise NotImplementedError
+
+  #: () -> Array[Product]
+  def items = raise NotImplementedError
+
+  #: () -> Integer
+  def subtotal = raise NotImplementedError
+
+  #: () -> Integer
+  def tax = raise NotImplementedError
+end
+
+# 割引適用後（user, items, subtotal, tax, discount）
+# TaxCalculatedInput を継承
+module DiscountAppliedInput
+  include TaxCalculatedInput
+
+  #: () -> Integer
+  def discount = raise NotImplementedError
+end
+
+# 合計計算後（user, items, subtotal, tax, discount, total）
+# DiscountAppliedInput を継承（TaxCalculatedInput も含む）
+module TotalCalculatedInput
+  include DiscountAppliedInput
+
+  #: () -> Integer
+  def total = raise NotImplementedError
+end
+
+# 注文作成後（user, order）
+module OrderCreatedInput
+  #: () -> User
+  def user = raise NotImplementedError
+
+  #: () -> Order
+  def order = raise NotImplementedError
+end
+
+# 最終出力用（order）
+module FinalOrderInput
+  #: () -> Order
+  def order = raise NotImplementedError
+end
+
+# =============================================================================
 # 個別 UseCase（パイプラインステップ）
 # =============================================================================
 
 # ユーザー検証
 class ValidateUserUseCase < SenroUsecaser::Base
   class Input
+    include OrderRequestInput
+
     #: (user_id: Integer, product_ids: Array[Integer], **untyped) -> void
     def initialize(user_id:, product_ids:, **_rest)
       @user_id = user_id #: Integer
@@ -347,6 +434,8 @@ class ValidateUserUseCase < SenroUsecaser::Base
   end
 
   class Output
+    include ValidatedUserInput
+
     #: (user: User, product_ids: Array[Integer], **untyped) -> void
     def initialize(user:, product_ids:, **_rest)
       @user = user #: User
@@ -365,7 +454,7 @@ class ValidateUserUseCase < SenroUsecaser::Base
   # @rbs!
   #   def user_repository: () -> UserRepository
 
-  input Input
+  input OrderRequestInput
   output Output
 
   #: (Input) -> SenroUsecaser::Result[Output]
@@ -380,6 +469,8 @@ end
 # 商品検証と在庫チェック
 class ValidateProductsUseCase < SenroUsecaser::Base
   class Input
+    include ValidatedUserInput
+
     #: (user: User, product_ids: Array[Integer], **untyped) -> void
     def initialize(user:, product_ids:, **_rest)
       @user = user #: User
@@ -394,6 +485,8 @@ class ValidateProductsUseCase < SenroUsecaser::Base
   end
 
   class Output
+    include ValidatedProductsInput
+
     #: (user: User, items: Array[Product], subtotal: Integer, **untyped) -> void
     def initialize(user:, items:, subtotal:, **_rest)
       @user = user #: User
@@ -416,7 +509,7 @@ class ValidateProductsUseCase < SenroUsecaser::Base
   # @rbs!
   #   def product_repository: () -> ProductRepository
 
-  input Input
+  input ValidatedUserInput
   output Output
 
   #: (Input) -> SenroUsecaser::Result[Output]
@@ -443,6 +536,8 @@ end
 # 税金計算
 class CalculateTaxUseCase < SenroUsecaser::Base
   class Input
+    include ValidatedProductsInput
+
     #: (user: User, items: Array[Product], subtotal: Integer, **untyped) -> void
     def initialize(user:, items:, subtotal:, **_rest)
       @user = user #: User
@@ -461,6 +556,8 @@ class CalculateTaxUseCase < SenroUsecaser::Base
   end
 
   class Output
+    include TaxCalculatedInput
+
     #: (user: User, items: Array[Product], subtotal: Integer, tax: Integer, **untyped) -> void
     def initialize(user:, items:, subtotal:, tax:, **_rest)
       @user = user #: User
@@ -482,7 +579,7 @@ class CalculateTaxUseCase < SenroUsecaser::Base
     attr_reader :tax
   end
 
-  input Input
+  input ValidatedProductsInput
   output Output
 
   #: (Input) -> SenroUsecaser::Result[Output]
@@ -495,6 +592,8 @@ end
 # プレミアム会員割引
 class ApplyPremiumDiscountUseCase < SenroUsecaser::Base
   class Input
+    include TaxCalculatedInput
+
     #: (user: User, items: Array[Product], subtotal: Integer, tax: Integer, **untyped) -> void
     def initialize(user:, items:, subtotal:, tax:, **_rest)
       @user = user #: User
@@ -517,6 +616,8 @@ class ApplyPremiumDiscountUseCase < SenroUsecaser::Base
   end
 
   class Output
+    include DiscountAppliedInput
+
     #: (user: User, items: Array[Product], subtotal: Integer, tax: Integer, discount: Integer, **untyped) -> void
     def initialize(user:, items:, subtotal:, tax:, discount:, **_rest)
       @user = user #: User
@@ -547,7 +648,7 @@ class ApplyPremiumDiscountUseCase < SenroUsecaser::Base
   # @rbs!
   #   def discount_service: () -> DiscountService
 
-  input Input
+  input TaxCalculatedInput
   output Output
 
   #: (Input) -> SenroUsecaser::Result[Output]
@@ -560,8 +661,12 @@ class ApplyPremiumDiscountUseCase < SenroUsecaser::Base
 end
 
 # 合計計算
+# Note: TaxCalculatedInput または DiscountAppliedInput のどちらも受け入れる
+# discount がない場合はデフォルト値 0 を使用
 class CalculateTotalUseCase < SenroUsecaser::Base
   class Input
+    include TaxCalculatedInput
+
     #: (user: User, items: Array[Product], subtotal: Integer, tax: Integer, ?discount: Integer, **untyped) -> void
     def initialize(user:, items:, subtotal:, tax:, discount: 0, **_rest)
       @user = user #: User
@@ -588,6 +693,8 @@ class CalculateTotalUseCase < SenroUsecaser::Base
   end
 
   class Output
+    include TotalCalculatedInput
+
     #: (user: User, items: Array[Product], subtotal: Integer, tax: Integer, discount: Integer, total: Integer, **untyped) -> void
     def initialize(user:, items:, subtotal:, tax:, discount:, total:, **_rest)
       @user = user #: User
@@ -617,15 +724,17 @@ class CalculateTotalUseCase < SenroUsecaser::Base
     attr_reader :total
   end
 
-  input Input
+  input TaxCalculatedInput
   output Output
 
-  #: (Input) -> SenroUsecaser::Result[Output]
+  #: (TaxCalculatedInput) -> SenroUsecaser::Result[Output]
   def call(input)
-    total = input.subtotal + input.tax - input.discount
+    # ApplyPremiumDiscountUseCase がスキップされた場合は discount がない
+    discount = input.respond_to?(:discount) ? input.discount : 0 # steep:ignore NoMethod
+    total = input.subtotal + input.tax - discount
     success(Output.new(
               user: input.user, items: input.items, subtotal: input.subtotal,
-              tax: input.tax, discount: input.discount, total: total
+              tax: input.tax, discount: discount, total: total
             ))
   end
 end
@@ -633,6 +742,8 @@ end
 # 決済処理
 class ProcessPaymentUseCase < SenroUsecaser::Base
   class Input
+    include TotalCalculatedInput
+
     #: (user: User, items: Array[Product], subtotal: Integer, tax: Integer, discount: Integer, total: Integer, **untyped) -> void
     def initialize(user:, items:, subtotal:, tax:, discount:, total:, **_rest)
       @user = user #: User
@@ -663,6 +774,8 @@ class ProcessPaymentUseCase < SenroUsecaser::Base
   end
 
   class Output
+    include TotalCalculatedInput
+
     #: (user: User, items: Array[Product], subtotal: Integer, tax: Integer, discount: Integer, total: Integer, payment: PaymentResult, **untyped) -> void
     def initialize(user:, items:, subtotal:, tax:, discount:, total:, payment:, **_rest)
       @user = user #: User
@@ -701,7 +814,7 @@ class ProcessPaymentUseCase < SenroUsecaser::Base
   # @rbs!
   #   def payment_service: () -> PaymentService
 
-  input Input
+  input TotalCalculatedInput
   output Output
 
   #: (Input) -> SenroUsecaser::Result[Output]
@@ -717,6 +830,8 @@ end
 # 注文作成
 class CreateOrderRecordUseCase < SenroUsecaser::Base
   class Input
+    include TotalCalculatedInput
+
     #: (user: User, items: Array[Product], subtotal: Integer, tax: Integer, discount: Integer, total: Integer, **untyped) -> void
     def initialize(user:, items:, subtotal:, tax:, discount:, total:, **_rest)
       @user = user #: User
@@ -747,6 +862,8 @@ class CreateOrderRecordUseCase < SenroUsecaser::Base
   end
 
   class Output
+    include OrderCreatedInput
+
     #: (user: User, order: Order, **untyped) -> void
     def initialize(user:, order:, **_rest)
       @user = user #: User
@@ -765,7 +882,7 @@ class CreateOrderRecordUseCase < SenroUsecaser::Base
   # @rbs!
   #   def order_repository: () -> OrderRepository
 
-  input Input
+  input TotalCalculatedInput
   output Output
 
   #: (Input) -> SenroUsecaser::Result[Output]
@@ -785,6 +902,8 @@ end
 # 通知送信
 class SendOrderNotificationUseCase < SenroUsecaser::Base
   class Input
+    include OrderCreatedInput
+
     #: (user: User, order: Order, **untyped) -> void
     def initialize(user:, order:, **_rest)
       @user = user #: User
@@ -799,6 +918,8 @@ class SendOrderNotificationUseCase < SenroUsecaser::Base
   end
 
   class Output
+    include FinalOrderInput
+
     #: (user: User, order: Order, notified: bool, **untyped) -> void
     def initialize(user:, order:, notified:, **_rest)
       @user = user #: User
@@ -821,10 +942,10 @@ class SendOrderNotificationUseCase < SenroUsecaser::Base
   # @rbs!
   #   def notification_service: () -> NotificationService
 
-  input Input
+  input OrderCreatedInput
   output Output
 
-  #: (Input) -> SenroUsecaser::Result[Output]
+  #: (OrderCreatedInput) -> SenroUsecaser::Result[Output]
   def call(input)
     notification_service.send_email(
       to: input.user.email,
@@ -838,6 +959,8 @@ end
 # パイプライン最終出力をラップ
 class WrapOrderOutputUseCase < SenroUsecaser::Base
   class Input
+    include FinalOrderInput
+
     #: (order: Order, **untyped) -> void
     def initialize(order:, **_rest)
       @order = order #: Order
@@ -847,7 +970,7 @@ class WrapOrderOutputUseCase < SenroUsecaser::Base
     attr_reader :order
   end
 
-  input Input
+  input FinalOrderInput
   output CreateOrderOutput
 
   #: (Input) -> SenroUsecaser::Result[CreateOrderOutput]
@@ -862,13 +985,13 @@ end
 
 # ログ記録用 Extension
 module LoggingExtension
-  #: (Hash[Symbol, untyped]) -> void
-  def self.before(context)
-    puts "  [Logging] UseCase 開始: #{context.keys.join(", ")}"
+  #: (untyped) -> void
+  def self.before(input)
+    puts "  [Logging] UseCase 開始: #{input.class.name}"
   end
 
-  #: (Hash[Symbol, untyped], SenroUsecaser::Result[untyped]) -> void
-  def self.after(_context, result)
+  #: (untyped, SenroUsecaser::Result[untyped]) -> void
+  def self.after(_input, result)
     status = result.success? ? "成功" : "失敗"
     puts "  [Logging] UseCase 終了: #{status}"
   end
@@ -877,6 +1000,8 @@ end
 # 注文作成パイプライン
 class CreateOrderUseCase < SenroUsecaser::Base
   class Input
+    include OrderRequestInput
+
     #: (user_id: Integer, product_ids: Array[Integer], **untyped) -> void
     def initialize(user_id:, product_ids:, **_rest)
       @user_id = user_id #: Integer
@@ -910,10 +1035,9 @@ class CreateOrderUseCase < SenroUsecaser::Base
     step WrapOrderOutputUseCase
   end
 
-  #: (Hash[Symbol, untyped]) -> bool
-  def premium_user?(context)
-    user = context[:user] #: User?
-    user&.premium? || false
+  #: (TaxCalculatedInput) -> bool
+  def premium_user?(input)
+    input.user.premium?
   end
 end
 
@@ -1016,6 +1140,13 @@ puts "-" * 70
 
 # リクエストごとに current_user を注入するパターン
 class CurrentUserAwareUseCase < SenroUsecaser::Base
+  # 空のInputクラス（入力不要なUseCase用）
+  class Input
+    #: (**untyped) -> void
+    def initialize(**_rest)
+    end
+  end
+
   depends_on :current_user, User
   depends_on :logger, Logger
 
@@ -1023,10 +1154,11 @@ class CurrentUserAwareUseCase < SenroUsecaser::Base
   #   def current_user: () -> User
   #   def logger: () -> Logger
 
+  input Input
   output GreetingOutput
 
-  #: (?untyped, **untyped) -> SenroUsecaser::Result[GreetingOutput]
-  def call(_input = nil, **_args)
+  #: (Input) -> SenroUsecaser::Result[GreetingOutput]
+  def call(_input)
     logger.info("現在のユーザー: #{current_user.name}")
     success(GreetingOutput.new(greeted: "こんにちは、#{current_user.name}さん!"))
   end
@@ -1039,7 +1171,7 @@ scoped_container = SenroUsecaser.container.scope do
   register(:current_user, current_user)
 end
 
-result = CurrentUserAwareUseCase.call(container: scoped_container)
+result = CurrentUserAwareUseCase.call(CurrentUserAwareUseCase::Input.new, container: scoped_container)
 if result.success?
   value = result.value!
   puts "  #{value.greeted}"
@@ -1071,8 +1203,48 @@ puts
 puts "9. Accumulated Context の確認"
 puts "-" * 70
 
+# Accumulated Context 用インターフェース
+module InitialInput
+  #: () -> String
+  def initial = raise NotImplementedError
+end
+
+module Step1Output
+  #: () -> String
+  def step1_data = raise NotImplementedError
+
+  #: () -> Integer
+  def counter = raise NotImplementedError
+end
+
+module Step2Output
+  include Step1Output
+
+  #: () -> String
+  def step2_data = raise NotImplementedError
+end
+
+module FinalAccumulatedInput
+  #: () -> Integer
+  def counter = raise NotImplementedError
+
+  #: () -> bool
+  def final = raise NotImplementedError
+end
+
+module Step3Output
+  include Step2Output
+  include FinalAccumulatedInput
+
+  #: () -> String
+  def step3_data = raise NotImplementedError
+end
+
+
 class Step1 < SenroUsecaser::Base
   class Input
+    include InitialInput
+
     #: (initial: String, **untyped) -> void
     def initialize(initial:, **_rest)
       @initial = initial #: String
@@ -1083,6 +1255,8 @@ class Step1 < SenroUsecaser::Base
   end
 
   class Output
+    include Step1Output
+
     #: (step1_data: String, counter: Integer, **untyped) -> void
     def initialize(step1_data:, counter:, **_rest)
       @step1_data = step1_data #: String
@@ -1096,10 +1270,10 @@ class Step1 < SenroUsecaser::Base
     attr_reader :counter
   end
 
-  input Input
+  input InitialInput
   output Output
 
-  #: (Input) -> SenroUsecaser::Result[Output]
+  #: (InitialInput) -> SenroUsecaser::Result[Output]
   def call(_input)
     success(Output.new(step1_data: "from step1", counter: 1))
   end
@@ -1107,6 +1281,8 @@ end
 
 class Step2 < SenroUsecaser::Base
   class Input
+    include Step1Output
+
     #: (step1_data: String, counter: Integer, **untyped) -> void
     def initialize(step1_data:, counter:, **_rest)
       @step1_data = step1_data #: String
@@ -1121,6 +1297,8 @@ class Step2 < SenroUsecaser::Base
   end
 
   class Output
+    include Step2Output
+
     #: (step1_data: String, step2_data: String, counter: Integer, **untyped) -> void
     def initialize(step1_data:, step2_data:, counter:, **_rest)
       @step1_data = step1_data #: String
@@ -1138,10 +1316,10 @@ class Step2 < SenroUsecaser::Base
     attr_reader :counter
   end
 
-  input Input
+  input Step1Output
   output Output
 
-  #: (Input) -> SenroUsecaser::Result[Output]
+  #: (Step1Output) -> SenroUsecaser::Result[Output]
   def call(input)
     success(Output.new(step1_data: input.step1_data, step2_data: "from step2", counter: input.counter + 1))
   end
@@ -1149,6 +1327,8 @@ end
 
 class Step3 < SenroUsecaser::Base
   class Input
+    include Step2Output
+
     #: (step1_data: String, step2_data: String, counter: Integer, **untyped) -> void
     def initialize(step1_data:, step2_data:, counter:, **_rest)
       @step1_data = step1_data #: String
@@ -1167,6 +1347,8 @@ class Step3 < SenroUsecaser::Base
   end
 
   class Output
+    include Step3Output
+
     #: (step1_data: String, step2_data: String, step3_data: String, counter: Integer, final: bool, **untyped) -> void
     def initialize(step1_data:, step2_data:, step3_data:, counter:, final:, **_rest)
       @step1_data = step1_data #: String
@@ -1192,13 +1374,15 @@ class Step3 < SenroUsecaser::Base
     attr_reader :final
   end
 
-  input Input
+  # Step2がスキップされる場合を考慮してStep1Outputも受け付ける
+  input Step1Output
   output Output
 
-  #: (Input) -> SenroUsecaser::Result[Output]
+  #: (Step1Output) -> SenroUsecaser::Result[Output]
   def call(input)
+    step2_data = input.respond_to?(:step2_data) ? input.step2_data : "skipped" # steep:ignore NoMethod
     success(Output.new(
-              step1_data: input.step1_data, step2_data: input.step2_data,
+              step1_data: input.step1_data, step2_data: step2_data,
               step3_data: "from step3", counter: input.counter + 1, final: true
             ))
   end
@@ -1206,6 +1390,8 @@ end
 
 class WrapAccumulatedOutputUseCase < SenroUsecaser::Base
   class Input
+    include FinalAccumulatedInput
+
     #: (counter: Integer, final: bool, **untyped) -> void
     def initialize(counter:, final:, **_rest)
       @counter = counter #: Integer
@@ -1219,10 +1405,10 @@ class WrapAccumulatedOutputUseCase < SenroUsecaser::Base
     attr_reader :final
   end
 
-  input Input
+  input FinalAccumulatedInput
   output AccumulatedOutput
 
-  #: (Input) -> SenroUsecaser::Result[AccumulatedOutput]
+  #: (FinalAccumulatedInput) -> SenroUsecaser::Result[AccumulatedOutput]
   def call(input)
     success(AccumulatedOutput.new(counter: input.counter, final: input.final))
   end
@@ -1230,6 +1416,8 @@ end
 
 class AccumulatedContextDemo < SenroUsecaser::Base
   class Input
+    include InitialInput
+
     #: (initial: String, **untyped) -> void
     def initialize(initial:, **_rest)
       @initial = initial #: String

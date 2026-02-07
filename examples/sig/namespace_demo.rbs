@@ -137,6 +137,11 @@ module NamespaceDemo
 
   # Public namespace の UseCase
   class ListPublicUsersUseCase < SenroUsecaser::Base
+    class Input
+      # : (**untyped) -> void
+      def initialize: (**untyped) -> void
+    end
+
     class Output
       # : (users: Array[User]) -> void
       def initialize: (users: Array[User]) -> void
@@ -149,12 +154,17 @@ module NamespaceDemo
 
     def logger: () -> Logger
 
-    # : (?untyped, **untyped) -> SenroUsecaser::Result[Output]
-    def call: (?untyped, **untyped) -> SenroUsecaser::Result[Output]
+    # : (Input) -> SenroUsecaser::Result[Output]
+    def call: (Input) -> SenroUsecaser::Result[Output]
   end
 
   # Admin namespace の UseCase
   class ListAdminUsersUseCase < SenroUsecaser::Base
+    class Input
+      # : (**untyped) -> void
+      def initialize: (**untyped) -> void
+    end
+
     class Output
       # : (users: Array[User]) -> void
       def initialize: (users: Array[User]) -> void
@@ -169,8 +179,8 @@ module NamespaceDemo
 
     def logger: () -> Logger
 
-    # : (?untyped, **untyped) -> SenroUsecaser::Result[Output]
-    def call: (?untyped, **untyped) -> SenroUsecaser::Result[Output]
+    # : (Input) -> SenroUsecaser::Result[Output]
+    def call: (Input) -> SenroUsecaser::Result[Output]
   end
 
   # Admin::Reports namespace の UseCase（ネストした namespace）
@@ -207,6 +217,11 @@ module NamespaceDemo
 
   # リクエストスコープで current_user を注入しつつ、namespace を活用
   class AdminActionUseCase < SenroUsecaser::Base
+    class Input
+      # : (**untyped) -> void
+      def initialize: (**untyped) -> void
+    end
+
     class Output
       # : (message: String) -> void
       def initialize: (message: String) -> void
@@ -221,14 +236,19 @@ module NamespaceDemo
 
     def notification_service: () -> Admin::NotificationService
 
-    # : (?untyped, **untyped) -> SenroUsecaser::Result[Output]
-    def call: (?untyped, **untyped) -> SenroUsecaser::Result[Output]
+    # : (Input) -> SenroUsecaser::Result[Output]
+    def call: (Input) -> SenroUsecaser::Result[Output]
   end
 end
 
 # Public::InferredUseCase → namespace "public" として推論
 module Public
   class InferredUseCase < SenroUsecaser::Base
+    class Input
+      # : (**untyped) -> void
+      def initialize: (**untyped) -> void
+    end
+
     class Output
       # : (message: String) -> void
       def initialize: (message: String) -> void
@@ -241,8 +261,8 @@ module Public
 
     def logger: () -> NamespaceDemo::Logger
 
-    # : (?untyped, **untyped) -> SenroUsecaser::Result[Output]
-    def call: (?untyped, **untyped) -> SenroUsecaser::Result[Output]
+    # : (Input) -> SenroUsecaser::Result[Output]
+    def call: (Input) -> SenroUsecaser::Result[Output]
   end
 end
 
@@ -250,6 +270,11 @@ end
 module Admin
   module Reports
     class InferredReportUseCase < SenroUsecaser::Base
+      class Input
+        # : (**untyped) -> void
+        def initialize: (**untyped) -> void
+      end
+
       class Output
         # : (message: String) -> void
         def initialize: (message: String) -> void
@@ -264,8 +289,8 @@ module Admin
 
       def logger: () -> NamespaceDemo::Logger
 
-      # : (?untyped, **untyped) -> SenroUsecaser::Result[Output]
-      def call: (?untyped, **untyped) -> SenroUsecaser::Result[Output]
+      # : (Input) -> SenroUsecaser::Result[Output]
+      def call: (Input) -> SenroUsecaser::Result[Output]
     end
   end
 end

@@ -292,6 +292,12 @@ module NamespaceDemo
   class ListPublicUsersUseCase < SenroUsecaser::Base
     namespace :public
 
+    class Input
+      #: (**untyped) -> void
+      def initialize(**_rest)
+      end
+    end
+
     class Output
       #: (users: Array[User]) -> void
       def initialize(users:)
@@ -309,10 +315,11 @@ module NamespaceDemo
     #   def user_repository: () -> Public::UserRepository
     #   def logger: () -> Logger
 
+    input Input
     output Output
 
-    #: (?untyped, **untyped) -> SenroUsecaser::Result[Output]
-    def call(_input = nil, **_args)
+    #: (Input) -> SenroUsecaser::Result[Output]
+    def call(_input)
       logger.info("Public ユーザー一覧を取得")
       users = user_repository.all
       success(Output.new(users: users))
@@ -322,6 +329,12 @@ module NamespaceDemo
   # Admin namespace の UseCase
   class ListAdminUsersUseCase < SenroUsecaser::Base
     namespace :admin
+
+    class Input
+      #: (**untyped) -> void
+      def initialize(**_rest)
+      end
+    end
 
     class Output
       #: (users: Array[User]) -> void
@@ -342,10 +355,11 @@ module NamespaceDemo
     #   def audit_logger: () -> Admin::AuditLogger
     #   def logger: () -> Logger
 
+    input Input
     output Output
 
-    #: (?untyped, **untyped) -> SenroUsecaser::Result[Output]
-    def call(_input = nil, **_args)
+    #: (Input) -> SenroUsecaser::Result[Output]
+    def call(_input)
       logger.info("Admin ユーザー一覧を取得")
 
       # 管理者操作なので監査ログを記録
@@ -416,6 +430,12 @@ module NamespaceDemo
   class AdminActionUseCase < SenroUsecaser::Base
     namespace :admin
 
+    class Input
+      #: (**untyped) -> void
+      def initialize(**_rest)
+      end
+    end
+
     class Output
       #: (message: String) -> void
       def initialize(message:)
@@ -435,10 +455,11 @@ module NamespaceDemo
     #   def audit_logger: () -> Admin::AuditLogger
     #   def notification_service: () -> Admin::NotificationService
 
+    input Input
     output Output
 
-    #: (?untyped, **untyped) -> SenroUsecaser::Result[Output]
-    def call(_input = nil, **_args)
+    #: (Input) -> SenroUsecaser::Result[Output]
+    def call(_input)
       audit_logger.log(action: "admin_action", performed_by: current_user)
       notification_service.notify(current_user, "アクションを実行しました")
       success(Output.new(message: "#{current_user.name} がアクションを実行"))
@@ -459,6 +480,12 @@ module Public
     # infer_namespace_from_module = true の場合、モジュール名 "Public" から
     # namespace "public" が自動的に推論される
 
+    class Input
+      #: (**untyped) -> void
+      def initialize(**_rest)
+      end
+    end
+
     class Output
       #: (message: String) -> void
       def initialize(message:)
@@ -476,10 +503,11 @@ module Public
     #   def user_repository: () -> NamespaceDemo::Public::UserRepository
     #   def logger: () -> NamespaceDemo::Logger
 
+    input Input
     output Output
 
-    #: (?untyped, **untyped) -> SenroUsecaser::Result[Output]
-    def call(_input = nil, **_args)
+    #: (Input) -> SenroUsecaser::Result[Output]
+    def call(_input)
       logger.info("InferredUseCase: namespace を自動推論して実行")
       users = user_repository.all
       success(Output.new(message: "#{users.length} 人のユーザーを取得（namespace 自動推論）"))
@@ -494,6 +522,12 @@ module Admin
       # namespace を明示的に設定しない！
       # infer_namespace_from_module = true の場合、モジュール名から
       # namespace "admin::reports" が自動的に推論される
+
+      class Input
+        #: (**untyped) -> void
+        def initialize(**_rest)
+        end
+      end
 
       class Output
         #: (message: String) -> void
@@ -514,10 +548,11 @@ module Admin
       #   def user_repository: () -> NamespaceDemo::Admin::UserRepository
       #   def logger: () -> NamespaceDemo::Logger
 
+      input Input
       output Output
 
-      #: (?untyped, **untyped) -> SenroUsecaser::Result[Output]
-      def call(_input = nil, **_args)
+      #: (Input) -> SenroUsecaser::Result[Output]
+      def call(_input)
         logger.info("InferredReportUseCase: ネストした namespace を自動推論して実行")
         users = user_repository.all
         report = report_generator.generate("inferred_report", { count: users.length })
@@ -604,7 +639,7 @@ puts
 puts "4. Public namespace UseCase 実行"
 puts "-" * 70
 
-result = NamespaceDemo::ListPublicUsersUseCase.call
+result = NamespaceDemo::ListPublicUsersUseCase.call(NamespaceDemo::ListPublicUsersUseCase::Input.new)
 if result.success?
   output = result.value!
   puts "  取得したユーザー数: #{output.users.length}"
@@ -618,7 +653,7 @@ puts
 puts "5. Admin namespace UseCase 実行"
 puts "-" * 70
 
-result = NamespaceDemo::ListAdminUsersUseCase.call
+result = NamespaceDemo::ListAdminUsersUseCase.call(NamespaceDemo::ListAdminUsersUseCase::Input.new)
 if result.success?
   output = result.value!
   puts "  取得した管理者数: #{output.users.length}"
@@ -673,7 +708,7 @@ scoped_container = container.scope do
   end
 end
 
-result = NamespaceDemo::AdminActionUseCase.call(container: scoped_container)
+result = NamespaceDemo::AdminActionUseCase.call(NamespaceDemo::AdminActionUseCase::Input.new, container: scoped_container)
 if result.success?
   output = result.value!
   puts "  結果: #{output.message}"
@@ -705,7 +740,7 @@ puts "  infer_namespace_from_module = true に設定"
 # Public::InferredUseCase は namespace を明示していないが、
 # モジュール名から "public" namespace が推論される
 puts "  Public::InferredUseCase を実行（namespace 自動推論）:"
-result = Public::InferredUseCase.call
+result = Public::InferredUseCase.call(Public::InferredUseCase::Input.new)
 if result.success?
   output = result.value!
   puts "    結果: #{output.message}"
@@ -714,7 +749,7 @@ end
 # Admin::Reports::InferredReportUseCase はネストしたモジュールから
 # "admin::reports" namespace が推論される
 puts "  Admin::Reports::InferredReportUseCase を実行（ネストした namespace 自動推論）:"
-result = Admin::Reports::InferredReportUseCase.call
+result = Admin::Reports::InferredReportUseCase.call(Admin::Reports::InferredReportUseCase::Input.new)
 if result.success?
   output = result.value!
   puts "    結果: #{output.message}"
