@@ -629,6 +629,24 @@ Execute multiple UseCases in sequence. Each step's output object becomes the nex
 
 **Important:** All pipeline steps must define an `input` class. The output of step A should be compatible with the input of step B.
 
+##### Simple Array Syntax
+
+For basic pipelines without conditions, pass UseCase classes directly as arguments:
+
+```ruby
+class PlaceOrderUseCase < SenroUsecaser::Base
+  input PlaceOrderInput
+  output CreateOrderOutput
+
+  # Simple sequential execution
+  organize ValidateOrderUseCase, CreateOrderUseCase, ChargePaymentUseCase, SendConfirmationEmailUseCase
+end
+```
+
+##### Block Syntax with `step`
+
+For advanced control (conditional execution, per-step error handling, input mapping), use the block syntax:
+
 ```ruby
 class PlaceOrderUseCase < SenroUsecaser::Base
   class Input
