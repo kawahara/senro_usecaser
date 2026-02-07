@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2026-02-07
+
+### Added
+
+- **DependsOn module for standalone DI support**
+  - New `SenroUsecaser::DependsOn` module can be extended into any class
+  - Provides `depends_on`, `namespace`, and automatic dependency resolution
+  - Default `initialize(container: nil)` is provided automatically
+  - Uses `SenroUsecaser.container` when no container is passed
+  - Supports custom initialize with `super(container: container)`
+
+- **on_failure hook**
+  - Called only when UseCase execution results in failure
+  - Supports block syntax, module syntax, and Hook class syntax
+  - Receives `(input, result)` or `(input, result, context)` for retry support
+  - In pipelines, triggers rollback of previously successful steps in reverse order
+
+- **Retry functionality**
+  - `retry_on :error_code, attempts: 3, wait: 1, backoff: :exponential`
+  - Backoff strategies: `:fixed`, `:linear`, `:exponential`
+  - `max_wait` and `jitter` options for fine-grained control
+  - `discard_on` to skip retry for specific errors
+  - `before_retry` and `after_retries_exhausted` callbacks
+  - Manual retry via `retry!` in `on_failure` hook
+
+### Changed
+
+- Removed redundant `include DependsOn::InstanceMethods` from Base and Hook classes
+  - `extend DependsOn` now automatically includes InstanceMethods
+
 ## [0.3.0] - 2026-01-31
 
 ### Added
