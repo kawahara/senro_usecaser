@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    senro_usecaser (0.4.1)
+    senro_usecaser (0.4.2)
 
 GEM
   remote: https://rubygems.org/
