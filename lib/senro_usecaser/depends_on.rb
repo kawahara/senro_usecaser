@@ -10,7 +10,7 @@ module SenroUsecaser
   # - `depends_on` for declaring dependencies
   # - `namespace` for scoped dependency resolution
   # - Automatic `infer_namespace_from_module` support
-  # - Default `initialize(container:)` that sets up dependency injection
+  # - Default `initialize` that sets up dependency injection (uses SenroUsecaser.container if not provided)
   #
   # @example Basic usage (no initialize needed)
   #   class MyService
@@ -27,7 +27,7 @@ module SenroUsecaser
   #     end
   #   end
   #
-  #   service = MyService.new(container: container)
+  #   service = MyService.new  # Uses SenroUsecaser.container
   #   service.logger  # => Logger instance
   #
   # @example Custom initialize with super
@@ -37,7 +37,7 @@ module SenroUsecaser
   #     depends_on :logger
   #     attr_reader :extra
   #
-  #     def initialize(container:, extra:)
+  #     def initialize(extra:, container: nil)
   #       super(container: container)  # Handles dependency resolution
   #       @extra = extra
   #     end
@@ -155,14 +155,18 @@ module SenroUsecaser
       # This provides a default initialize that sets up dependency injection.
       # Classes can override this and call super to extend the behavior.
       #
-      # @param container [Container] The DI container to resolve dependencies from
+      # @param container [Container, nil] The DI container to resolve dependencies from.
+      #   If nil, uses SenroUsecaser.container.
       #
-      # @example Default usage (no custom initialize needed)
+      # @example Default usage (no arguments needed)
       #   class MyService
       #     extend SenroUsecaser::DependsOn
       #     depends_on :logger
       #   end
-      #   service = MyService.new(container: container)
+      #   service = MyService.new  # Uses SenroUsecaser.container
+      #
+      # @example With explicit container
+      #   service = MyService.new(container: custom_container)
       #
       # @example Custom initialize with super
       #   class MyService
@@ -170,15 +174,15 @@ module SenroUsecaser
       #     depends_on :logger
       #     attr_reader :extra
       #
-      #     def initialize(container:, extra:)
+      #     def initialize(extra:, container: nil)
       #       super(container: container)
       #       @extra = extra
       #     end
       #   end
       #
-      #: (container: Container) -> void
-      def initialize(container:)
-        @_container = container
+      #: (?container: Container?) -> void
+      def initialize(container: nil)
+        @_container = container || SenroUsecaser.container
         @_dependencies = {} #: Hash[Symbol, untyped]
         resolve_dependencies
       end

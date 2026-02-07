@@ -941,7 +941,7 @@ The `SenroUsecaser::DependsOn` module can be used in any class to enable the sam
 
 **Basic Usage (No initialize needed)**
 
-When you extend `DependsOn`, a default `initialize(container:)` is provided automatically:
+When you extend `DependsOn`, a default `initialize` is provided automatically. If no container is passed, it uses `SenroUsecaser.container`:
 
 ```ruby
 class OrderService
@@ -960,9 +960,12 @@ class OrderService
   end
 end
 
-# Usage
-service = OrderService.new(container: SenroUsecaser.container)
+# Usage - uses SenroUsecaser.container by default
+service = OrderService.new
 service.process_order(123)
+
+# Or with explicit container
+service = OrderService.new(container: custom_container)
 ```
 
 **Custom initialize with super**
@@ -976,7 +979,7 @@ class OrderService
   depends_on :order_repository, OrderRepository
   attr_reader :default_currency
 
-  def initialize(container:, default_currency: "JPY")
+  def initialize(default_currency: "JPY", container: nil)
     super(container: container)  # Handles dependency resolution
     @default_currency = default_currency
   end
@@ -987,7 +990,8 @@ class OrderService
   end
 end
 
-service = OrderService.new(container: SenroUsecaser.container, default_currency: "USD")
+# Uses SenroUsecaser.container by default
+service = OrderService.new(default_currency: "USD")
 service.default_currency  # => "USD"
 service.order_repository  # => OrderRepository instance
 ```
@@ -1054,7 +1058,7 @@ end
 
 **Instance methods (via InstanceMethods module):**
 
-- `initialize(container:)` - Default initialize that sets up dependency injection
+- `initialize(container: nil)` - Default initialize that sets up dependency injection. Uses `SenroUsecaser.container` if no container is provided.
 - `resolve_dependencies` - Resolve all declared dependencies from the container
 - `effective_namespace` - Get the namespace used for resolution (declared or inferred)
 
@@ -1063,8 +1067,8 @@ end
 If you need complete control, you can manually set up the required instance variables:
 
 ```ruby
-def initialize(container:, extra:)
-  @_container = container
+def initialize(extra:, container: nil)
+  @_container = container || SenroUsecaser.container
   @_dependencies = {}
   @extra = extra
   resolve_dependencies

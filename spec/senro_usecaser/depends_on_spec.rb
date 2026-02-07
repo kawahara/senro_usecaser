@@ -6,6 +6,10 @@ RSpec.describe SenroUsecaser::DependsOn do
     stub_const("TestRepository", Class.new)
   end
 
+  after do
+    SenroUsecaser.container.clear!
+  end
+
   let(:container) do
     SenroUsecaser::Container.new.tap do |c|
       c.register(:logger, TestLogger.new)
@@ -193,8 +197,10 @@ RSpec.describe SenroUsecaser::DependsOn do
       expect(service.logger).to be_a(TestLogger)
     end
 
-    it "requires container keyword argument" do
-      expect { service_class.new }.to raise_error(ArgumentError)
+    it "uses global container when container not provided" do
+      SenroUsecaser.container.register(:logger, TestLogger.new)
+      service = service_class.new
+      expect(service.logger).to be_a(TestLogger)
     end
   end
 
@@ -206,7 +212,7 @@ RSpec.describe SenroUsecaser::DependsOn do
         depends_on :logger
         attr_reader :extra
 
-        def initialize(container:, extra:)
+        def initialize(extra:, container: nil)
           super(container: container)
           @extra = extra
         end
@@ -215,6 +221,13 @@ RSpec.describe SenroUsecaser::DependsOn do
 
     it "uses super to call default initialize" do
       service = service_class.new(container: container, extra: "value")
+      expect(service.extra).to eq("value")
+      expect(service.logger).to be_a(TestLogger)
+    end
+
+    it "uses global container when container not provided" do
+      SenroUsecaser.container.register(:logger, TestLogger.new)
+      service = service_class.new(extra: "value")
       expect(service.extra).to eq("value")
       expect(service.logger).to be_a(TestLogger)
     end
