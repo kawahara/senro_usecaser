@@ -188,6 +188,73 @@ module SenroUsecaser
     # : () -> Array[Proc]
     def self.around_hooks: () -> Array[Proc]
 
+    # Adds an on_failure hook
+    #
+    # : () { (untyped, Result[untyped], ?RetryContext?) -> void } -> void
+    def self.on_failure: () { (untyped, Result[untyped], ?RetryContext?) -> void } -> void
+
+    # Returns the list of on_failure hooks
+    #
+    # : () -> Array[Proc]
+    def self.on_failure_hooks: () -> Array[Proc]
+
+    # Configures automatic retry for specific error types
+    #
+    # @example Retry on network errors
+    #   retry_on :network_error, attempts: 3, wait: 1
+    #
+    # @example Retry on exception class
+    #   retry_on Net::OpenTimeout, attempts: 5, wait: 2, backoff: :exponential
+    #
+    # @example Multiple error types with jitter
+    #   retry_on :rate_limited, :timeout, attempts: 3, wait: 1, jitter: 0.1
+    #
+    # rubocop:disable Metrics/ParameterLists
+    # : (*(Symbol | Class), ?attempts: Integer, ?wait: (Float | Integer),
+    # :  ?backoff: Symbol, ?max_wait: (Float | Integer)?, ?jitter: (Float | Integer)) -> void
+    def self.retry_on: (*untyped error_matchers, ?attempts: untyped, ?wait: untyped, ?backoff: untyped, ?max_wait: untyped, ?jitter: untyped) -> untyped
+
+    # Returns the list of retry configurations
+    #
+    # : () -> Array[RetryConfiguration]
+    def self.retry_configurations: () -> Array[RetryConfiguration]
+
+    # Configures errors that should immediately discard (no retry)
+    #
+    # @example Discard on validation errors
+    #   discard_on :validation_error, :not_found
+    #
+    # @example Discard on exception class
+    #   discard_on ArgumentError
+    #
+    # : (*(Symbol | Class)) -> void
+    def self.discard_on: (*Symbol | Class) -> void
+
+    # Returns the list of discard matchers
+    #
+    # : () -> Array[(Symbol | Class)]
+    def self.discard_matchers: () -> Array[Symbol | Class]
+
+    # Adds a before_retry hook
+    #
+    # : () { (untyped, Result[untyped], RetryContext) -> void } -> void
+    def self.before_retry: () { (untyped, Result[untyped], RetryContext) -> void } -> void
+
+    # Returns the list of before_retry hooks
+    #
+    # : () -> Array[Proc]
+    def self.before_retry_hooks: () -> Array[Proc]
+
+    # Adds an after_retries_exhausted hook
+    #
+    # : () { (untyped, Result[untyped], RetryContext) -> void } -> void
+    def self.after_retries_exhausted: () { (untyped, Result[untyped], RetryContext) -> void } -> void
+
+    # Returns the list of after_retries_exhausted hooks
+    #
+    # : () -> Array[Proc]
+    def self.after_retries_exhausted_hooks: () -> Array[Proc]
+
     # Declares the expected input type(s) for this UseCase
     # Accepts a Class or one or more Modules that input must include
     #
@@ -261,6 +328,18 @@ module SenroUsecaser
     # : (?untyped input) -> Result[untyped]
     def call: (?untyped input) -> Result[untyped]
 
+    # Represents a record of a step execution in a pipeline
+    class StepExecutionRecord < Struct[untyped]
+      attr_accessor step(): untyped
+
+      attr_accessor input(): untyped
+
+      attr_accessor result(): untyped
+
+      def self.new: (?step: untyped, ?input: untyped, ?result: untyped) -> instance
+                  | ({ ?step: untyped, ?input: untyped, ?result: untyped }) -> instance
+    end
+
     private
 
     # Creates a success Result with the given value
@@ -301,6 +380,36 @@ module SenroUsecaser
     # : (untyped) { () -> Result[untyped] } -> Result[untyped]
     def execute_with_hooks: (untyped) { () -> Result[untyped] } -> Result[untyped]
 
+    # Executes the UseCase with retry support
+    #
+    # : (untyped) -> Result[untyped]
+    def execute_with_retry: (untyped) -> Result[untyped]
+
+    # Builds a retry context with max attempts from configurations
+    #
+    # : () -> RetryContext
+    def build_retry_context: () -> RetryContext
+
+    # Finds a retry configuration that matches the result
+    #
+    # : (Result[untyped]) -> RetryConfiguration?
+    def find_matching_retry_config: (Result[untyped]) -> RetryConfiguration?
+
+    # Checks if the result should be discarded (no retry)
+    #
+    # : (Result[untyped]) -> bool
+    def should_discard?: (Result[untyped]) -> bool
+
+    # Runs before_retry hooks
+    #
+    # : (untyped, Result[untyped], RetryContext) -> void
+    def run_before_retry_hooks: (untyped, Result[untyped], RetryContext) -> void
+
+    # Runs after_retries_exhausted hooks
+    #
+    # : (untyped, Result[untyped], RetryContext) -> void
+    def run_after_retries_exhausted_hooks: (untyped, Result[untyped], RetryContext) -> void
+
     # Wraps a non-Result value in Result.success
     #
     # : (untyped) -> Result[untyped]
@@ -335,6 +444,16 @@ module SenroUsecaser
     #
     # : (untyped, Result[untyped]) -> void
     def run_after_hooks: (untyped, Result[untyped]) -> void
+
+    # Runs all on_failure hooks when result is a failure
+    #
+    # : (untyped, Result[untyped], ?RetryContext?) -> void
+    def run_on_failure_hooks: (untyped, Result[untyped], ?RetryContext?) -> void
+
+    # Calls an on_failure hook with appropriate arguments
+    #
+    # : (untyped, Symbol, untyped, Result[untyped], RetryContext?) -> void
+    def call_on_failure_hook: (untyped, Symbol, untyped, Result[untyped], RetryContext?) -> void
 
     # Returns instantiated hook objects
     #
@@ -408,8 +527,27 @@ module SenroUsecaser
 
     # Calls a single UseCase in the pipeline
     # Requires input type(s) to be defined for pipeline steps
+    # Note: on_failure hooks are not called here - they're called in pipeline rollback
     #
     # : (singleton(Base), untyped) -> Result[untyped]
     def call_use_case: (singleton(Base), untyped) -> Result[untyped]
+
+    # Performs the UseCase as a pipeline step (without on_failure hooks)
+    # on_failure hooks are handled by the pipeline's rollback mechanism instead
+    #
+    # : (untyped, ?capture_exceptions: bool) -> Result[untyped]
+    def perform_as_pipeline_step: (untyped, ?capture_exceptions: bool) -> Result[untyped]
+
+    # Executes rollback by calling on_failure hooks on executed steps in reverse order
+    # Unlike run_on_failure_hooks, this method calls hooks regardless of result status
+    # because we want to rollback even successfully completed steps when pipeline fails
+    #
+    # : (Array[StepExecutionRecord]) -> void
+    def execute_pipeline_rollback: (Array[StepExecutionRecord]) -> void
+
+    # Runs on_failure hooks for rollback purposes (regardless of result status)
+    #
+    # : (untyped, Result[untyped]) -> void
+    def run_rollback_hooks: (untyped, Result[untyped]) -> void
   end
 end

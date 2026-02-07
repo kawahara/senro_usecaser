@@ -2214,4 +2214,440 @@ RSpec.describe SenroUsecaser::Base do
       expect(child.input_types).to eq([child_module])
     end
   end
+
+  describe "on_failure hooks" do
+    let(:simple_input) { Struct.new(:value, keyword_init: true) }
+
+    it "calls on_failure hook when result is failure" do
+      called_with = nil
+
+      input_class = simple_input
+      use_case = Class.new(described_class) do
+        input input_class
+
+        on_failure do |input, result|
+          called_with = [input, result]
+        end
+
+        define_method(:call) do |_input|
+          failure(SenroUsecaser::Error.new(code: :test_error, message: "failed"))
+        end
+      end
+
+      result = use_case.call(simple_input.new(value: 1))
+
+      expect(result).to be_failure
+      expect(called_with).not_to be_nil
+      expect(called_with[0].value).to eq(1)
+      expect(called_with[1]).to eq(result)
+    end
+
+    it "does not call on_failure hook when result is success" do
+      called = false
+
+      input_class = simple_input
+      use_case = Class.new(described_class) do
+        input input_class
+
+        on_failure do |_input, _result|
+          called = true
+        end
+
+        define_method(:call) do |input|
+          success(input.value)
+        end
+      end
+
+      use_case.call(simple_input.new(value: 1))
+
+      expect(called).to be false
+    end
+
+    it "calls on_failure hook with context when provided" do
+      received_context = nil
+
+      input_class = simple_input
+      use_case = Class.new(described_class) do
+        input input_class
+        retry_on :test_error, attempts: 2
+
+        on_failure do |_input, _result, context|
+          received_context = context
+        end
+
+        define_method(:call) do |_input|
+          failure(SenroUsecaser::Error.new(code: :test_error, message: "test error"))
+        end
+      end
+
+      use_case.call(simple_input.new(value: 1))
+
+      expect(received_context).to be_a(SenroUsecaser::RetryContext)
+    end
+
+    it "inherits on_failure hooks from parent" do
+      call_order = []
+
+      input_class = simple_input
+      parent = Class.new(described_class) do
+        input input_class
+
+        on_failure do |_input, _result|
+          call_order << :parent
+        end
+
+        define_method(:call) do |_input|
+          failure(SenroUsecaser::Error.new(code: :error, message: "error"))
+        end
+      end
+
+      child = Class.new(parent) do
+        on_failure do |_input, _result|
+          call_order << :child
+        end
+      end
+
+      child.call(simple_input.new(value: 1))
+
+      expect(call_order).to eq(%i[parent child])
+    end
+  end
+
+  describe "retry functionality" do
+    let(:simple_input) { Struct.new(:value, keyword_init: true) }
+
+    describe ".retry_on" do
+      it "retries on matching error code" do
+        attempt_count = 0
+
+        input_class = simple_input
+        use_case = Class.new(described_class) do
+          input input_class
+          retry_on :network_error, attempts: 3, wait: 0
+
+          define_method(:call) do |_input|
+            attempt_count += 1
+            if attempt_count < 3
+              failure(SenroUsecaser::Error.new(code: :network_error, message: "network error"))
+            else
+              success("done")
+            end
+          end
+        end
+
+        result = use_case.call(simple_input.new(value: 1))
+
+        expect(result).to be_success
+        expect(attempt_count).to eq(3)
+      end
+
+      it "stops retrying when max attempts reached" do
+        attempt_count = 0
+
+        input_class = simple_input
+        use_case = Class.new(described_class) do
+          input input_class
+          retry_on :error, attempts: 3, wait: 0
+
+          define_method(:call) do |_input|
+            attempt_count += 1
+            failure(SenroUsecaser::Error.new(code: :error, message: "error"))
+          end
+        end
+
+        result = use_case.call(simple_input.new(value: 1))
+
+        expect(result).to be_failure
+        expect(attempt_count).to eq(3)
+      end
+
+      it "does not retry on non-matching error code" do
+        attempt_count = 0
+
+        input_class = simple_input
+        use_case = Class.new(described_class) do
+          input input_class
+          retry_on :network_error, attempts: 3, wait: 0
+
+          define_method(:call) do |_input|
+            attempt_count += 1
+            failure(SenroUsecaser::Error.new(code: :validation_error, message: "validation error"))
+          end
+        end
+
+        result = use_case.call(simple_input.new(value: 1))
+
+        expect(result).to be_failure
+        expect(attempt_count).to eq(1)
+      end
+    end
+
+    describe ".discard_on" do
+      it "does not retry on discarded errors" do
+        attempt_count = 0
+
+        input_class = simple_input
+        use_case = Class.new(described_class) do
+          input input_class
+          retry_on :error, attempts: 3, wait: 0
+          discard_on :fatal_error
+
+          define_method(:call) do |_input|
+            attempt_count += 1
+            failure(SenroUsecaser::Error.new(code: :fatal_error, message: "fatal error"))
+          end
+        end
+
+        result = use_case.call(simple_input.new(value: 1))
+
+        expect(result).to be_failure
+        expect(attempt_count).to eq(1)
+      end
+    end
+
+    describe ".before_retry" do
+      it "calls before_retry hook before each retry" do
+        attempt_count = 0
+        before_retry_calls = []
+
+        input_class = simple_input
+        use_case = Class.new(described_class) do
+          input input_class
+          retry_on :error, attempts: 3, wait: 0
+
+          before_retry do |_input, _result, context|
+            before_retry_calls << context.attempt
+          end
+
+          define_method(:call) do |_input|
+            attempt_count += 1
+            failure(SenroUsecaser::Error.new(code: :error, message: "error"))
+          end
+        end
+
+        use_case.call(simple_input.new(value: 1))
+
+        expect(before_retry_calls).to eq([1, 2])
+      end
+    end
+
+    describe ".after_retries_exhausted" do
+      it "calls after_retries_exhausted when all retries fail" do
+        exhausted_called = false
+        received_context = nil
+
+        input_class = simple_input
+        use_case = Class.new(described_class) do
+          input input_class
+          retry_on :error, attempts: 2, wait: 0
+
+          after_retries_exhausted do |_input, _result, context|
+            exhausted_called = true
+            received_context = context
+          end
+
+          define_method(:call) do |_input|
+            failure(SenroUsecaser::Error.new(code: :error, message: "error"))
+          end
+        end
+
+        use_case.call(simple_input.new(value: 1))
+
+        expect(exhausted_called).to be true
+        expect(received_context.attempt).to eq(2)
+      end
+
+      it "does not call after_retries_exhausted on success" do
+        exhausted_called = false
+        attempt_count = 0
+
+        input_class = simple_input
+        use_case = Class.new(described_class) do
+          input input_class
+          retry_on :error, attempts: 3, wait: 0
+
+          after_retries_exhausted do |_input, _result, _context|
+            exhausted_called = true
+          end
+
+          define_method(:call) do |_input|
+            attempt_count += 1
+            if attempt_count < 2
+              failure(SenroUsecaser::Error.new(code: :error, message: "error"))
+            else
+              success("done")
+            end
+          end
+        end
+
+        use_case.call(simple_input.new(value: 1))
+
+        expect(exhausted_called).to be false
+      end
+    end
+
+    describe "on_failure hook retry request" do
+      it "retries when on_failure hook calls retry!" do
+        attempt_count = 0
+
+        input_class = simple_input
+        use_case = Class.new(described_class) do
+          input input_class
+
+          on_failure do |_input, _result, context|
+            context.retry! if context && context.attempt < 3
+          end
+
+          define_method(:call) do |_input|
+            attempt_count += 1
+            failure(SenroUsecaser::Error.new(code: :error, message: "error"))
+          end
+        end
+
+        use_case.call(simple_input.new(value: 1))
+
+        expect(attempt_count).to eq(3)
+      end
+
+      it "uses modified input from retry!" do
+        received_values = []
+
+        input_class = simple_input
+        use_case = Class.new(described_class) do
+          input input_class
+
+          on_failure do |input, _result, context|
+            context.retry!(input: input_class.new(value: input.value + 10)) if context&.attempt&.< 2
+          end
+
+          define_method(:call) do |input|
+            received_values << input.value
+            failure(SenroUsecaser::Error.new(code: :error, message: "error"))
+          end
+        end
+
+        use_case.call(simple_input.new(value: 1))
+
+        expect(received_values).to eq([1, 11])
+      end
+    end
+  end
+
+  describe "pipeline rollback" do
+    let(:simple_input) { Struct.new(:value, keyword_init: true) }
+
+    it "calls on_failure hooks on executed steps when pipeline fails" do
+      rollback_calls = []
+
+      input_class = simple_input
+      step_a = Class.new(described_class) do
+        input input_class
+
+        on_failure do |_input, _result|
+          rollback_calls << :step_a
+        end
+
+        define_method(:call) do |input|
+          success(input_class.new(value: input.value + 1))
+        end
+      end
+
+      step_b = Class.new(described_class) do
+        input input_class
+
+        on_failure do |_input, _result|
+          rollback_calls << :step_b
+        end
+
+        define_method(:call) do |_input|
+          failure(SenroUsecaser::Error.new(code: :error, message: "error"))
+        end
+      end
+
+      pipeline = Class.new(described_class) do
+        organize step_a, step_b
+      end
+
+      result = pipeline.call(simple_input.new(value: 1))
+
+      expect(result).to be_failure
+      expect(rollback_calls).to eq(%i[step_b step_a])
+    end
+
+    it "does not call rollback on successful pipeline" do
+      rollback_calls = []
+
+      input_class = simple_input
+      step_a = Class.new(described_class) do
+        input input_class
+
+        on_failure do |_input, _result|
+          rollback_calls << :step_a
+        end
+
+        define_method(:call) do |input|
+          success(input_class.new(value: input.value + 1))
+        end
+      end
+
+      step_b = Class.new(described_class) do
+        input input_class
+
+        on_failure do |_input, _result|
+          rollback_calls << :step_b
+        end
+
+        define_method(:call) do |input|
+          success(input.value * 2)
+        end
+      end
+
+      pipeline = Class.new(described_class) do
+        organize step_a, step_b
+      end
+
+      result = pipeline.call(simple_input.new(value: 1))
+
+      expect(result).to be_success
+      expect(rollback_calls).to be_empty
+    end
+
+    it "calls rollback in collect mode when errors exist" do
+      rollback_calls = []
+
+      input_class = simple_input
+      step_a = Class.new(described_class) do
+        input input_class
+
+        on_failure do |_input, _result|
+          rollback_calls << :step_a
+        end
+
+        define_method(:call) do |input|
+          success(input_class.new(value: input.value))
+        end
+      end
+
+      step_b = Class.new(described_class) do
+        input input_class
+
+        on_failure do |_input, _result|
+          rollback_calls << :step_b
+        end
+
+        define_method(:call) do |_input|
+          failure(SenroUsecaser::Error.new(code: :error, message: "error"))
+        end
+      end
+
+      pipeline = Class.new(described_class) do
+        organize step_a, step_b, on_failure: :collect
+      end
+
+      result = pipeline.call(simple_input.new(value: 1))
+
+      expect(result).to be_failure
+      expect(rollback_calls).to eq(%i[step_b step_a])
+    end
+  end
 end

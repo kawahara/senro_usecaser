@@ -1,0 +1,90 @@
+# Generated from lib/senro_usecaser/retry_configuration.rb with RBS::Inline
+
+module SenroUsecaser
+  # Configuration for automatic retry behavior
+  #
+  # This class defines when and how retries should occur based on
+  # error codes or exception classes, with configurable backoff strategies.
+  #
+  # @example Basic retry configuration
+  #   RetryConfiguration.new(
+  #     matchers: [:network_error, Net::OpenTimeout],
+  #     attempts: 3,
+  #     wait: 1.0
+  #   )
+  #
+  # @example With exponential backoff
+  #   RetryConfiguration.new(
+  #     matchers: [:rate_limited],
+  #     attempts: 5,
+  #     wait: 2.0,
+  #     backoff: :exponential,
+  #     max_wait: 60
+  #   )
+  class RetryConfiguration
+    # Returns the list of error matchers (Symbols for error codes, Classes for exceptions)
+    # : () -> Array[(Symbol | Class)]
+    attr_reader matchers: untyped
+
+    # Returns the maximum number of attempts
+    # : () -> Integer
+    attr_reader attempts: untyped
+
+    # Returns the base wait time in seconds
+    # : () -> (Float | Integer)
+    attr_reader wait: untyped
+
+    # Returns the backoff strategy (:fixed, :linear, :exponential)
+    # : () -> Symbol
+    attr_reader backoff: untyped
+
+    # Returns the maximum wait time in seconds
+    # : () -> (Float | Integer)
+    attr_reader max_wait: untyped
+
+    # Returns the jitter factor (0.0 to 1.0)
+    # : () -> (Float | Integer)
+    attr_reader jitter: untyped
+
+    # Initializes a new retry configuration
+    #
+    # @param matchers [Array<Symbol, Class>] Error codes or exception classes to match
+    # @param attempts [Integer] Maximum number of attempts (default: 3)
+    # @param wait [Numeric] Base wait time in seconds (default: 0)
+    # @param backoff [Symbol] Backoff strategy: :fixed, :linear, or :exponential (default: :fixed)
+    # @param max_wait [Numeric] Maximum wait time in seconds (default: 3600)
+    # @param jitter [Numeric] Jitter factor 0.0-1.0 to randomize wait times (default: 0)
+    #
+    # rubocop:disable Metrics/ParameterLists
+    # : (matchers: Array[(Symbol | Class)], ?attempts: Integer, ?wait: (Float | Integer),
+    # :  ?backoff: Symbol, ?max_wait: (Float | Integer)?, ?jitter: (Float | Integer)) -> void
+    def initialize: (matchers: untyped, ?attempts: untyped, ?wait: untyped, ?backoff: untyped, ?max_wait: untyped, ?jitter: untyped) -> untyped
+
+    # Checks if this configuration matches the given result
+    #
+    # : (Result[untyped]) -> bool
+    def matches?: (Result[untyped]) -> bool
+
+    # Calculates the wait time for the given attempt number
+    #
+    # : (Integer) -> Float
+    def calculate_wait: (Integer) -> Float
+
+    private
+
+    # Checks if an error matches any of the configured matchers
+    #
+    # : (Error) -> bool
+    def matches_error?: (Error) -> bool
+
+    # Calculates the base wait time based on backoff strategy
+    #
+    # : (Integer) -> (Float | Integer)
+    def calculate_base_wait: (Integer) -> (Float | Integer)
+
+    # Applies jitter to the wait time
+    #
+    # : ((Float | Integer)) -> Float
+    def apply_jitter: (Float | Integer) -> Float
+  end
+end

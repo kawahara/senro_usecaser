@@ -127,6 +127,26 @@ module SenroUsecaser
       yield
     end
 
+    # Called when the UseCase fails
+    # Override in subclass to add failure handling or rollback logic
+    #
+    # @example Basic logging
+    #   def on_failure(input, result)
+    #     logger.error("Failed: #{result.errors.first&.message}")
+    #   end
+    #
+    # @example Request retry
+    #   def on_failure(input, result, context)
+    #     if result.errors.first&.code == :network_error && context.attempt < 3
+    #       context.retry!(wait: 2.0)
+    #     end
+    #   end
+    #
+    #: (untyped, Result[untyped], ?RetryContext?) -> void
+    def on_failure(input, result, context = nil)
+      # Override in subclass
+    end
+
     private
 
     # Returns the effective namespace for dependency resolution

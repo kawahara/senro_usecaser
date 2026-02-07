@@ -58,6 +58,10 @@ Metrics/PerceivedComplexity:
   Exclude:
     - "lib/senro_usecaser/base.rb"
 
+Metrics/AbcSize:
+  Exclude:
+    - "lib/senro_usecaser/base.rb"
+
 # AroundBlock is a false positive for our DSL
 RSpec/AroundBlock:
   Enabled: false

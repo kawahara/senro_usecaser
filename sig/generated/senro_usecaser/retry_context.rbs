@@ -1,0 +1,101 @@
+# Generated from lib/senro_usecaser/retry_context.rb with RBS::Inline
+
+module SenroUsecaser
+  # Represents the context of a retry operation
+  #
+  # This class tracks the state of retry attempts including:
+  # - Current attempt number
+  # - Maximum attempts allowed
+  # - Elapsed time since first attempt
+  # - Whether a retry should occur
+  #
+  # @example Basic usage in on_failure hook
+  #   on_failure do |input, result, context|
+  #     if context.attempt < 3
+  #       context.retry!(wait: 1.0)
+  #     end
+  #   end
+  #
+  # @example With modified input
+  #   on_failure do |input, result, context|
+  #     if result.errors.first&.code == :rate_limited
+  #       context.retry!(input: input.with_reduced_batch_size, wait: 5.0)
+  #     end
+  #   end
+  class RetryContext
+    # Returns the current attempt number (1-indexed)
+    # : () -> Integer
+    attr_reader attempt: untyped
+
+    # Returns the maximum number of attempts allowed
+    # : () -> Integer?
+    attr_reader max_attempts: untyped
+
+    # Returns the time when the first attempt started
+    # : () -> Time
+    attr_reader started_at: untyped
+
+    # Returns the error from the last failed attempt
+    # : () -> Error?
+    attr_reader last_error: untyped
+
+    # Returns the input to use for the retry (nil means use original)
+    # : () -> untyped
+    attr_reader retry_input: untyped
+
+    # Returns the wait time before retrying
+    # : () -> (Float | Integer)?
+    attr_reader retry_wait: untyped
+
+    # Initializes a new retry context
+    #
+    # : (?max_attempts: Integer?) -> void
+    def initialize: (?max_attempts: Integer?) -> void
+
+    # Returns true if this is a retry (attempt > 1)
+    #
+    # : () -> bool
+    def retried?: () -> bool
+
+    # Returns the elapsed time since the first attempt
+    #
+    # : () -> Float
+    def elapsed_time: () -> Float
+
+    # Returns true if max_attempts has been reached
+    #
+    # : () -> bool
+    def exhausted?: () -> bool
+
+    # Returns true if a retry has been requested
+    #
+    # : () -> bool
+    def should_retry?: () -> bool
+
+    # Requests a retry with optional modified input and wait time
+    #
+    # @example Retry with default settings
+    #   context.retry!
+    #
+    # @example Retry with wait time
+    #   context.retry!(wait: 2.0)
+    #
+    # @example Retry with modified input
+    #   context.retry!(input: modified_input, wait: 1.0)
+    #
+    # : (?input: untyped, ?wait: (Float | Integer)?) -> void
+    def retry!: (?input: untyped, ?wait: (Float | Integer)?) -> void
+
+    # Increments the attempt counter and resets retry state
+    # Called internally between retry attempts
+    #
+    # : (?last_error: Error?) -> void
+    def increment!: (?last_error: Error?) -> void
+
+    # Resets the retry request state
+    # Called internally after processing retry decision
+    #
+    # : () -> void
+    def reset_retry_state!: () -> void
+  end
+end

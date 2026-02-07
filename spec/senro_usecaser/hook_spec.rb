@@ -187,6 +187,55 @@ RSpec.describe SenroUsecaser::Hook do
       expect(call_order).to eq(%i[before inner after])
       expect(result).to be_success
     end
+
+    it "calls on_failure hook without context" do
+      called_with = nil
+
+      hook_class = Class.new(described_class) do
+        define_method(:on_failure) do |input, result, _context = nil|
+          called_with = [input, result]
+        end
+      end
+
+      result = SenroUsecaser::Result.failure(SenroUsecaser::Error.new(code: :error, message: "error"))
+      hook = hook_class.new(container: container)
+      hook.on_failure("test_input", result)
+
+      expect(called_with).to eq(["test_input", result])
+    end
+
+    it "calls on_failure hook with context" do
+      called_with = nil
+
+      hook_class = Class.new(described_class) do
+        define_method(:on_failure) do |input, result, context = nil|
+          called_with = [input, result, context]
+        end
+      end
+
+      result = SenroUsecaser::Result.failure(SenroUsecaser::Error.new(code: :error, message: "error"))
+      context = SenroUsecaser::RetryContext.new
+      hook = hook_class.new(container: container)
+      hook.on_failure("test_input", result, context)
+
+      expect(called_with).to eq(["test_input", result, context])
+    end
+
+    it "on_failure hook can request retry" do
+      hook_class = Class.new(described_class) do
+        define_method(:on_failure) do |_input, _result, context = nil|
+          context&.retry!(wait: 1.0) if context&.attempt == 1
+        end
+      end
+
+      result = SenroUsecaser::Result.failure(SenroUsecaser::Error.new(code: :error, message: "error"))
+      context = SenroUsecaser::RetryContext.new
+      hook = hook_class.new(container: container)
+      hook.on_failure("input", result, context)
+
+      expect(context.should_retry?).to be true
+      expect(context.retry_wait).to eq(1.0)
+    end
   end
 
   describe "inheritance" do
